@@ -28,24 +28,17 @@ export const LeaderboardPage: React.FC = () => {
   }, [activeMode]);
 
   return (
-    <div className="space-y-6">
-      <div className="space-y-1">
-        <h1 className="text-2xl font-bold text-slate-900">Leaderboard Kelas</h1>
-        <p className="text-sm text-slate-600">
-          Urutan peringkat: (1) Total Poin Akumulasi tertinggi, (2) Total Waktu Kumulatif tercepat.
-          Jika poin dan waktu sama persis, peringkat dianggap seri. Mode Hanya Latihan tidak masuk
-          ke papan peringkat.
-        </p>
-      </div>
+    <div className="space-y-5">
+      <h1 className="text-2xl font-bold text-slate-900">Leaderboard Kelas</h1>
 
       {/* 4 Mode Tabs */}
-      <div className="flex flex-wrap gap-1.5 p-1 bg-slate-200/70 rounded-xl w-fit max-w-full overflow-x-auto">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 p-1.5 bg-slate-200/70 rounded-xl">
         {LEADERBOARD_MODES.map((m) => (
           <button
             key={m.id}
             type="button"
             onClick={() => setActiveMode(m.id)}
-            className={`px-3.5 py-2 text-xs font-semibold rounded-lg transition-colors whitespace-nowrap shrink-0 ${
+            className={`px-3 py-2 text-xs font-semibold rounded-lg transition-colors text-center flex items-center justify-center ${
               activeMode === m.id
                 ? 'bg-white text-blue-700 shadow-xs'
                 : 'text-slate-600 hover:text-slate-900'

@@ -33,7 +33,7 @@ export const SyntaxTerminal: React.FC<SyntaxTerminalProps> = ({
   isBlindMode = false,
   blindExamTyping = false,
   hint,
-  placeholder = 'Ketik perintah atau sintaks di sini...',
+  placeholder = 'Ketik jawaban...',
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const prevValueRef = useRef<string>(value);
@@ -255,8 +255,8 @@ export const SyntaxTerminal: React.FC<SyntaxTerminalProps> = ({
   const typedLines = normalizedValue.split('\n').length;
   const expectedLines = normalizedExpected.split('\n').length;
   const textareaRows = hideHints
-    ? Math.min(10, Math.max(3, typedLines + 1))
-    : Math.min(12, Math.max(2, Math.max(expectedLines, typedLines) + (isMultilineExpected ? 1 : 0)));
+    ? Math.min(6, Math.max(2, typedLines))
+    : Math.min(6, Math.max(2, Math.max(expectedLines, typedLines)));
 
   return (
     <div
@@ -264,50 +264,37 @@ export const SyntaxTerminal: React.FC<SyntaxTerminalProps> = ({
       className="rounded-xl bg-slate-950 border border-slate-800 shadow-sm overflow-hidden cursor-text"
     >
       {/* Terminal Header */}
-      <div className="flex items-center justify-between px-4 py-2.5 bg-slate-900 border-b border-slate-800 text-xs">
+      <div className="flex items-center justify-between px-3.5 py-2 bg-slate-900 border-b border-slate-800 text-xs">
         <div className="flex items-center gap-2 text-slate-300 font-mono">
           <Terminal className="w-3.5 h-3.5 text-blue-400 shrink-0" />
           <span>root@ukk-lab:~#</span>
-          {!blindExamTyping && syntaxCheckMode === 'flexible_order' && (
-            <span className="px-1.5 py-0.5 text-[10px] font-sans font-semibold bg-blue-500/20 text-blue-300 border border-blue-500/30 rounded">
-              Urutan Kata Bebas
-            </span>
-          )}
         </div>
-        <div className="flex items-center gap-2">
-          {blindExamTyping ? (
-            <span className="text-slate-400">Menunggu Submit Jawaban</span>
-          ) : evaluation.isCompleteMatch ? (
-            <span className="inline-flex items-center gap-1.5 text-emerald-400 font-medium">
-              <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-              {syntaxCheckMode === 'flexible_order'
-                ? 'Semua Token Cocok'
-                : 'Sintaks Cocok'}
-            </span>
-          ) : evaluation.hasAnyError ? (
-            <span className="inline-flex items-center gap-1.5 text-red-400 font-medium">
-              <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-              {syntaxCheckMode === 'flexible_order'
-                ? 'Periksa Token Merah'
-                : 'Periksa Karakter Merah'}
-            </span>
-          ) : (
-            <span className="text-slate-400">
-              {syntaxCheckMode === 'flexible_order' &&
-              normalizedValue.length > 0 &&
-              (flexEval?.missingTokens.length || 0) > 0
-                ? 'Menunggu Token Lengkap'
-                : 'Menunggu Input'}
-            </span>
-          )}
-        </div>
+        {!blindExamTyping && (
+          <div className="flex items-center gap-2">
+            {evaluation.isCompleteMatch ? (
+              <span className="inline-flex items-center gap-1.5 text-emerald-400 font-medium">
+                <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                {syntaxCheckMode === 'flexible_order'
+                  ? 'Semua Token Cocok'
+                  : 'Sintaks Cocok'}
+              </span>
+            ) : evaluation.hasAnyError ? (
+              <span className="inline-flex items-center gap-1.5 text-red-400 font-medium">
+                <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                {syntaxCheckMode === 'flexible_order'
+                  ? 'Periksa Token Merah'
+                  : 'Periksa Karakter Merah'}
+              </span>
+            ) : null}
+          </div>
+        )}
       </div>
 
       {/* Live Evaluation Display */}
-      <div className="p-4 sm:p-5 space-y-4">
+      <div className="p-3 sm:p-4 space-y-2.5">
         <div
           aria-live="polite"
-          className="font-mono text-sm sm:text-base leading-relaxed whitespace-pre-wrap break-words min-h-[3.25rem] flex items-start gap-2"
+          className="font-mono text-sm sm:text-base leading-relaxed whitespace-pre-wrap break-words min-h-[2.25rem] flex items-start gap-2"
         >
           <span className="text-blue-400 select-none shrink-0">$</span>
           <div className="flex-1 min-w-0 whitespace-pre-wrap">
@@ -319,16 +306,16 @@ export const SyntaxTerminal: React.FC<SyntaxTerminalProps> = ({
           </div>
         </div>
 
-        {/* Token Status Strip for Flexible Word Order Mode (disabled in blindExamTyping!) */}
+        {/* Token Status Strip for Flexible Word Order Mode (disabled in blindExamTyping) */}
         {!blindExamTyping && syntaxCheckMode === 'flexible_order' && flexEval && (
-          <div className="rounded-lg bg-slate-900/90 border border-slate-800 px-3.5 py-2.5 space-y-2 text-xs">
+          <div className="rounded-lg bg-slate-900/90 border border-slate-800 px-3 py-2 space-y-1.5 text-xs">
             <div className="flex flex-wrap items-center justify-between gap-2 text-slate-300">
               <span className="font-semibold text-slate-200">
-                Status Token (Urutan Bebas)
+                Status Token
               </span>
               {!isBlindMode ? (
                 <span className="font-mono tabular-nums text-slate-400">
-                  Terpenuhi: {flexEval.correctTokens.length} / {flexEval.expectedTokenCount} token
+                  {flexEval.correctTokens.length} / {flexEval.expectedTokenCount} token
                 </span>
               ) : (
                 <span className="font-mono tabular-nums text-slate-400">
@@ -339,9 +326,6 @@ export const SyntaxTerminal: React.FC<SyntaxTerminalProps> = ({
 
             {flexEval.correctTokens.length > 0 && (
               <div className="flex flex-wrap items-center gap-1.5">
-                <span className="text-[11px] text-emerald-400 font-medium mr-1">
-                  Token benar:
-                </span>
                 {flexEval.correctTokens.map((tok, i) => (
                   <span
                     key={`ok_${i}`}
@@ -355,9 +339,6 @@ export const SyntaxTerminal: React.FC<SyntaxTerminalProps> = ({
 
             {flexEval.wrongTokens.length > 0 && (
               <div className="flex flex-wrap items-center gap-1.5">
-                <span className="text-[11px] text-red-400 font-medium mr-1">
-                  Token salah / tambahan:
-                </span>
                 {flexEval.wrongTokens.map((tok, i) => (
                   <span
                     key={`err_${i}`}
@@ -369,36 +350,20 @@ export const SyntaxTerminal: React.FC<SyntaxTerminalProps> = ({
               </div>
             )}
 
-            {!evaluation.isCompleteMatch && flexEval.missingTokens.length > 0 && (
+            {!evaluation.isCompleteMatch && flexEval.missingTokens.length > 0 && !isBlindMode && (
               <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-amber-300">
-                {!isBlindMode ? (
-                  <>
-                    <span className="font-medium">
-                      Masih kurang {flexEval.missingTokens.length} token:
-                    </span>
-                    {flexEval.missingTokens.map((tok, i) => (
-                      <span
-                        key={`miss_${i}`}
-                        className="px-2 py-0.5 font-mono bg-slate-800 text-slate-400 border border-slate-700 rounded select-none"
-                      >
-                        {'·'.repeat(Math.min(14, Math.max(2, tok.length)))}
-                      </span>
-                    ))}
-                  </>
-                ) : (
-                  <span className="font-medium">
-                    Masih ada token yang kurang untuk melengkapi perintah.
-                  </span>
-                )}
+                <span className="font-medium">
+                  Kurang {flexEval.missingTokens.length} token
+                </span>
               </div>
             )}
           </div>
         )}
 
-        {/* Dedicated Multiline-Capable Input Area */}
-        <div className="pt-3 border-t border-slate-800/80">
+        {/* Input Area */}
+        <div className="pt-2.5 border-t border-slate-800/80">
           <label htmlFor="syntax-terminal-input" className="sr-only">
-            Ketik perintah sintaks
+            Ketik jawaban
           </label>
           <textarea
             ref={textareaRef}
@@ -413,46 +378,14 @@ export const SyntaxTerminal: React.FC<SyntaxTerminalProps> = ({
             autoCorrect="off"
             autoComplete="off"
             spellCheck={false}
-            placeholder={
-              blindExamTyping
-                ? 'Ketik jawaban sintaks secara utuh (tanpa koreksi langsung), lalu tekan tombol Submit Jawaban...'
-                : syntaxCheckMode === 'flexible_order'
-                  ? 'Ketik semua kata/token perintah dipisahkan spasi (urutan bebas; huruf besar/kecil sensitif)...'
-                  : 'Ketik sintaks di sini (mendukung beberapa baris dengan Enter; spasi & huruf besar/kecil sensitif)...'
-            }
-            className="w-full bg-slate-900 text-white placeholder:text-slate-500 font-mono text-sm sm:text-base px-3.5 py-2.5 rounded-lg border border-slate-700 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30 disabled:opacity-60 resize-y whitespace-pre overflow-x-auto"
+            placeholder="Ketik jawaban..."
+            className="w-full bg-slate-900 text-white placeholder:text-slate-500 font-mono text-sm sm:text-base px-3 py-2 rounded-lg border border-slate-700 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30 disabled:opacity-60 resize-none whitespace-pre overflow-x-auto"
           />
-          <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400">
-            <span>
-              Karakter:{' '}
-              <span className="font-mono tabular-nums text-slate-200">{normalizedValue.length}</span>
-              {!hideHints && syntaxCheckMode === 'exact' && (
-                <>
-                  {' '}
-                  / <span className="font-mono tabular-nums text-slate-300">{normalizedExpected.length}</span>
-                </>
-              )}
-              {' · '}Baris: <span className="font-mono tabular-nums text-slate-200">{typedLines}</span>
-              {!hideHints && syntaxCheckMode === 'exact' && expectedLines > 1 && (
-                <>
-                  {' '}
-                  / <span className="font-mono tabular-nums text-slate-300">{expectedLines}</span>
-                </>
-              )}
-            </span>
-            <span>
-              {blindExamTyping
-                ? 'Backspace untuk koreksi sebelum Submit · Ctrl+Enter atau klik Submit Jawaban'
-                : syntaxCheckMode === 'flexible_order'
-                  ? 'Backspace untuk koreksi · Enter / tombol lanjut saat semua token cocok'
-                  : 'Enter untuk baris baru · Ctrl+Enter atau tombol lanjut untuk selesai'}
-            </span>
-          </div>
         </div>
 
         {/* Guided Hint inside terminal only if not Blind/Exam Mode and hint exists */}
         {!hideHints && hint && hint.trim().length > 0 && (
-          <div className="rounded-lg bg-slate-900/80 border border-slate-800 px-3.5 py-2.5 text-xs text-slate-300">
+          <div className="rounded-lg bg-slate-900/80 border border-slate-800 px-3 py-2 text-xs text-slate-300">
             <span className="font-semibold text-blue-300">Petunjuk: </span>
             <span className="font-mono whitespace-pre-wrap">{hint}</span>
           </div>

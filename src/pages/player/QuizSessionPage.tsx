@@ -3,13 +3,13 @@ import {
   AlertTriangle,
   ArrowLeft,
   ArrowRight,
+  Check,
   Clock,
   Info,
-  Send,
 } from 'lucide-react';
-import { MODE_META, QUESTION_TYPE_LABELS } from '../../constants/defaults';
+import { MODE_META } from '../../constants/defaults';
 import { useAuth } from '../../contexts/AuthContext';
-import { ExamFeedbackOverlay } from '../../components/ExamFeedbackOverlay';
+import { ExamFeedbackOverlay, preloadFeedbackSvgs } from '../../components/ExamFeedbackOverlay';
 import { SyntaxTerminal } from '../../components/SyntaxTerminal';
 import { generateDocId, saveCompletedSession } from '../../services/firestoreService';
 import type {
@@ -31,6 +31,8 @@ import {
   playErrorTetToot,
   playSuccessFanfare,
   preloadFeedbackSounds,
+  stopFeedbackSounds,
+  unlockSuccessSound,
 } from '../../utils/soundEffects';
 import { evaluateSyntaxWithAlternatives } from '../../utils/syntaxEngine';
 
@@ -55,7 +57,7 @@ export const QuizSessionPage: React.FC<QuizSessionPageProps> = ({
   onFinish,
   onExit,
 }) => {
-  const { player, questions, categories, syntaxPaths, syntaxStages, settings, refreshPlayer } =
+  const { player, questions, syntaxPaths, syntaxStages, settings, refreshPlayer } =
     useAuth();
 
   const isOrderedUjian = mode === 'ujian';
@@ -154,6 +156,7 @@ export const QuizSessionPage: React.FC<QuizSessionPageProps> = ({
   // Post-submit animation & lock state for Mode Ujian
   const [feedbackState, setFeedbackState] = useState<'correct' | 'wrong' | null>(null);
   const [feedbackExiting, setFeedbackExiting] = useState(false);
+  const [feedbackPlayKey, setFeedbackPlayKey] = useState(0);
 
   const [collectedAnswers, setCollectedAnswers] = useState<DraftAnswer[]>([]);
   const [submittingSession, setSubmittingSession] = useState(false);
@@ -164,10 +167,14 @@ export const QuizSessionPage: React.FC<QuizSessionPageProps> = ({
   const pendingNextAnswersRef = useRef<DraftAnswer[] | null>(null);
   const autoAdvanceTimerRef = useRef<number | null>(null);
   const exitAnimTimerRef = useRef<number | null>(null);
+  const soundDelayTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
-    if (isOrderedUjian && player?.preferences?.soundEnabled !== false) {
-      preloadFeedbackSounds();
+    if (isOrderedUjian) {
+      preloadFeedbackSvgs();
+      if (player?.preferences?.soundEnabled !== false) {
+        preloadFeedbackSounds();
+      }
     }
     return () => {
       if (autoAdvanceTimerRef.current !== null) {
@@ -176,17 +183,15 @@ export const QuizSessionPage: React.FC<QuizSessionPageProps> = ({
       if (exitAnimTimerRef.current !== null) {
         window.clearTimeout(exitAnimTimerRef.current);
       }
+      if (soundDelayTimerRef.current !== null) {
+        window.clearTimeout(soundDelayTimerRef.current);
+      }
+      stopFeedbackSounds();
     };
   }, [isOrderedUjian, player?.preferences?.soundEnabled]);
 
   const currentInstance = sessionInstances[currentIndex] || null;
   const currentQuestion = currentInstance?.question || null;
-
-  const categoryNameMap = useMemo(() => {
-    const map = new Map<string, string>();
-    categories.forEach((c) => map.set(c.id, c.name));
-    return map;
-  }, [categories]);
 
   const perQuestionWeight = useMemo(() => {
     if (sessionInstances.length === 0) return 0;
@@ -283,6 +288,11 @@ export const QuizSessionPage: React.FC<QuizSessionPageProps> = ({
         window.clearTimeout(exitAnimTimerRef.current);
         exitAnimTimerRef.current = null;
       }
+      if (soundDelayTimerRef.current !== null) {
+        window.clearTimeout(soundDelayTimerRef.current);
+        soundDelayTimerRef.current = null;
+      }
+      stopFeedbackSounds();
       setFeedbackExiting(false);
       setFeedbackState(null);
       setSubmittingSession(true);
@@ -433,6 +443,11 @@ export const QuizSessionPage: React.FC<QuizSessionPageProps> = ({
         window.clearTimeout(exitAnimTimerRef.current);
         exitAnimTimerRef.current = null;
       }
+      if (soundDelayTimerRef.current !== null) {
+        window.clearTimeout(soundDelayTimerRef.current);
+        soundDelayTimerRef.current = null;
+      }
+      stopFeedbackSounds();
       pendingNextAnswersRef.current = null;
       submitLockRef.current = false;
       setFeedbackExiting(false);
@@ -462,24 +477,38 @@ export const QuizSessionPage: React.FC<QuizSessionPageProps> = ({
     const isCorrect = draft.isCompletedCorrect;
     const soundOn = player?.preferences?.soundEnabled !== false;
 
+    if (soundDelayTimerRef.current !== null) {
+      window.clearTimeout(soundDelayTimerRef.current);
+      soundDelayTimerRef.current = null;
+    }
+
     if (isCorrect) {
-      playSuccessFanfare(soundOn);
+      // Unlock audio synchronously on click, then trigger at 1.8s when Success.svg reaches the checkmark draw phase
+      unlockSuccessSound(soundOn);
+      soundDelayTimerRef.current = window.setTimeout(() => {
+        soundDelayTimerRef.current = null;
+        playSuccessFanfare(soundOn);
+      }, 1800);
     } else {
       playErrorTetToot(soundOn);
     }
 
     const nextAnswers = [...collectedAnswers, draft];
     pendingNextAnswersRef.current = nextAnswers;
+    setFeedbackPlayKey((k) => k + 1);
     setFeedbackExiting(false);
     setFeedbackState(isCorrect ? 'correct' : 'wrong');
 
+    const exitDelayMs = isCorrect ? 4550 : 2450;
+    const advanceDelayMs = isCorrect ? 4950 : 2850;
+
     exitAnimTimerRef.current = window.setTimeout(() => {
       setFeedbackExiting(true);
-    }, 3100);
+    }, exitDelayMs);
 
     autoAdvanceTimerRef.current = window.setTimeout(() => {
       advanceToNextOrFinish(nextAnswers);
-    }, 3550);
+    }, advanceDelayMs);
   }, [
     feedbackState,
     submittingSession,
@@ -519,7 +548,7 @@ export const QuizSessionPage: React.FC<QuizSessionPageProps> = ({
           className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
-          Kembali ke Pilihan Mode
+          Kembali ke Beranda
         </button>
       </div>
     );
@@ -595,32 +624,30 @@ export const QuizSessionPage: React.FC<QuizSessionPageProps> = ({
   const progressPercent = Math.round(((currentIndex + 1) / sessionInstances.length) * 100);
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
-      {/* Top Session Bar */}
-      <div className="bg-white border border-slate-200 rounded-xl p-4 flex flex-wrap items-center justify-between gap-4">
-        <div className="space-y-1">
-          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
-            <span className="font-semibold text-blue-600">{MODE_META[mode].label}</span>
+    <div className="max-w-4xl mx-auto space-y-4">
+      {/* Top Session Header (unboxed) */}
+      <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-200">
+        <div className="space-y-1.5">
+          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
+            <span className="font-semibold text-slate-900">{MODE_META[mode].label}</span>
             <span aria-hidden="true">·</span>
             <span className="tabular-nums">
               Soal {currentIndex + 1} dari {sessionInstances.length}
             </span>
-            <span aria-hidden="true">·</span>
-            <span className="tabular-nums">Bobot {perQuestionWeight} poin/soal (Maks 100)</span>
           </div>
-          <div className="w-48 sm:w-64 h-2 bg-slate-100 rounded-full overflow-hidden">
+          <div className="w-48 sm:w-64 h-1.5 bg-slate-200 rounded-full overflow-hidden">
             <div
-              className="h-full bg-blue-600 transition-all duration-200"
+              className="h-full bg-emerald-600 transition-all duration-200"
               style={{ width: `${progressPercent}%` }}
             />
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
           {hasCountdownTimer && (
             <div className="flex items-center gap-1.5 text-sm font-mono tabular-nums text-slate-700">
               <Clock
-                className={`w-4 h-4 ${remainingSeconds <= 60 ? 'text-red-600' : 'text-blue-600'}`}
+                className={`w-4 h-4 ${remainingSeconds <= 60 ? 'text-red-600' : 'text-slate-600'}`}
               />
               <span className={remainingSeconds <= 60 ? 'text-red-600 font-semibold' : ''}>
                 {formatTimer(remainingSeconds)}
@@ -630,167 +657,117 @@ export const QuizSessionPage: React.FC<QuizSessionPageProps> = ({
           <button
             type="button"
             onClick={onExit}
-            className="px-3 py-1.5 text-xs font-medium text-slate-600 hover:text-slate-900 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
+            className="px-3 py-1.5 text-xs font-medium text-slate-600 hover:text-slate-900 border border-slate-300 bg-white rounded-lg hover:bg-slate-50 transition-colors whitespace-nowrap shrink-0"
           >
             Keluar
           </button>
         </div>
       </div>
 
-      {/* Question Card */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-6 sm:p-8 space-y-6">
-        <div className="space-y-2">
-          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
-            <span>
-              {currentInstance.chapterTitle
-                ? `${currentInstance.chapterTitle} · `
-                : ''}
-              {categoryNameMap.get(currentQuestion.categoryId) || currentQuestion.categoryId}
-            </span>
-            <span aria-hidden="true">·</span>
-            <span>
-              {isOrderedUjian ? 'Ujian Sintaks Berurutan' : QUESTION_TYPE_LABELS[effectiveType]}
-            </span>
-            {isSyntaxQuestion && resolvedAnswerInfo.answerMode === 'dynamic' && player.absenNumber && (
-              <>
-                <span aria-hidden="true">·</span>
-                <span className="font-mono font-medium text-blue-700">
-                  Soal Dinamis (Absen {player.absenNumber})
-                </span>
-              </>
-            )}
-            {isSyntaxQuestion && resolvedAnswerInfo.syntaxCheckMode === 'flexible_order' && (
-              <>
-                <span aria-hidden="true">·</span>
-                <span className="font-medium text-amber-700">Urutan Kata Bebas</span>
-              </>
-            )}
-          </div>
-          <h2 className="text-xl font-bold text-slate-900">
-            {currentInstance.milestoneTitle || currentQuestion.title}
-          </h2>
-          <p className="text-sm sm:text-base text-slate-700 leading-relaxed whitespace-pre-line">
-            {currentInstance.promptUsed}
-          </p>
-        </div>
-
-        {/* Interactive Input Area (kept visible in place behind overlay) */}
-        {isSyntaxQuestion ? (
-          <div className="space-y-4">
-            <SyntaxTerminal
-              key={`${currentIndex}_${currentQuestion.id}`}
-              expectedAnswers={resolvedAnswerInfo.resolvedAnswers}
-              syntaxCheckMode={resolvedAnswerInfo.syntaxCheckMode}
-              value={syntaxInput}
-              onChange={setSyntaxInput}
-              disabled={submittingSession || feedbackState !== null}
-              onMistakeEvent={
-                isOrderedUjian
-                  ? undefined
-                  : (pos) => {
-                      setMistakeCount((c) => c + 1);
-                      setWrongPositionsSeen((prev) => new Set(prev).add(pos));
-                    }
-              }
-              onSubmit={
-                isOrderedUjian
-                  ? handleUjianSubmit
-                  : undefined
-              }
-              isBlindMode={isBlindOrUjian}
-              blindExamTyping={isOrderedUjian}
-              hint={!isBlindOrUjian ? currentQuestion.hint : undefined}
-            />
-          </div>
-        ) : (
-          <div className="space-y-3">
-            <div className="grid grid-cols-1 gap-3">
-              {currentQuestion.options.map((opt, idx) => {
-                const letter = ['A', 'B', 'C', 'D'][idx] || String(idx + 1);
-                const isSelected = selectedOption === idx;
-
-                const cardStyle = isSelected
-                  ? 'border-blue-600 bg-blue-50 text-blue-950 ring-1 ring-blue-600'
-                  : 'border-slate-200 bg-white hover:border-blue-300 hover:bg-blue-50/40 text-slate-800';
-
-                return (
-                  <button
-                    key={idx}
-                    type="button"
-                    disabled={submittingSession || feedbackState !== null}
-                    onClick={() => setSelectedOption(idx)}
-                    className={`w-full text-left px-4 py-3.5 rounded-xl border transition-colors flex items-start gap-3 ${cardStyle}`}
-                  >
-                    <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-700 shrink-0 mt-0.5">
-                      {letter}
-                    </span>
-                    <span className="text-sm leading-relaxed flex-1">{opt}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {saveError && (
-          <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-xs text-red-700">
-            {saveError}
-          </div>
-        )}
-
-        {/* Action Footer */}
-        <div className="pt-4 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
-          <div className="text-xs text-slate-500">
-            {isOrderedUjian ? (
-              <span>
-                Ketik sintaks lengkap dengan teks putih netral. Nilai ditentukan saat menekan
-                Submit Jawaban.
-              </span>
-            ) : (
-              <span>
-                Perhatian: Setelah lanjut ke soal berikutnya, jawaban tidak dapat diubah kembali.
-              </span>
-            )}
-          </div>
-
-          <div className="flex items-center gap-3">
-            {isOrderedUjian ? (
-              <button
-                type="button"
-                disabled={submittingSession || feedbackState !== null}
-                onClick={handleUjianSubmit}
-                className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-60"
-              >
-                <Send className="w-4 h-4" />
-                {submittingSession ? 'Menyimpan Ujian...' : 'Submit Jawaban'}
-              </button>
-            ) : (
-              <button
-                type="button"
-                disabled={submittingSession}
-                onClick={handleStandardNextOrFinish}
-                className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-60"
-              >
-                {submittingSession
-                  ? 'Menyimpan Ujian...'
-                  : currentIndex + 1 >= sessionInstances.length
-                    ? 'Selesaikan Ujian'
-                    : isSyntaxQuestion && syntaxInput.trim().length === 0
-                      ? 'Lewati & Lanjut'
-                      : !isSyntaxQuestion && selectedOption < 0
-                        ? 'Lewati & Lanjut'
-                        : 'Lanjut ke Soal Berikutnya'}
-                <ArrowRight className="w-4 h-4" />
-              </button>
-            )}
-          </div>
-        </div>
+      {/* Question Competency & Prompt (unboxed) */}
+      <div className="space-y-1.5">
+        <p className="text-xs sm:text-sm font-medium text-slate-500">
+          {currentInstance.milestoneTitle || currentQuestion.title}
+        </p>
+        <h1 className="text-lg sm:text-xl font-semibold text-slate-950 leading-snug whitespace-pre-line">
+          {currentInstance.promptUsed}
+        </h1>
       </div>
 
-      {/* Ribbon + Confetti Overlay displayed directly on top of the active question page */}
+      {/* Interactive Input Area */}
+      {isSyntaxQuestion ? (
+        <SyntaxTerminal
+          key={`${currentIndex}_${currentQuestion.id}`}
+          expectedAnswers={resolvedAnswerInfo.resolvedAnswers}
+          syntaxCheckMode={resolvedAnswerInfo.syntaxCheckMode}
+          value={syntaxInput}
+          onChange={setSyntaxInput}
+          disabled={submittingSession || feedbackState !== null}
+          onMistakeEvent={
+            isOrderedUjian
+              ? undefined
+              : (pos) => {
+                  setMistakeCount((c) => c + 1);
+                  setWrongPositionsSeen((prev) => new Set(prev).add(pos));
+                }
+          }
+          onSubmit={
+            isOrderedUjian
+              ? handleUjianSubmit
+              : undefined
+          }
+          isBlindMode={isBlindOrUjian}
+          blindExamTyping={isOrderedUjian}
+          hint={!isBlindOrUjian ? currentQuestion.hint : undefined}
+        />
+      ) : (
+        <div className="grid grid-cols-1 gap-2">
+          {currentQuestion.options.map((opt, idx) => {
+            const letter = ['A', 'B', 'C', 'D'][idx] || String(idx + 1);
+            const isSelected = selectedOption === idx;
+
+            const cardStyle = isSelected
+              ? 'border-emerald-600 bg-emerald-50 text-emerald-950 ring-1 ring-emerald-600'
+              : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50 text-slate-800';
+
+            return (
+              <button
+                key={idx}
+                type="button"
+                disabled={submittingSession || feedbackState !== null}
+                onClick={() => setSelectedOption(idx)}
+                className={`w-full text-left px-4 py-2.5 rounded-xl border transition-colors flex items-start gap-3 ${cardStyle}`}
+              >
+                <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-700 shrink-0 mt-0.5">
+                  {letter}
+                </span>
+                <span className="text-sm leading-snug flex-1">{opt}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {saveError && (
+        <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-xs text-red-700">
+          {saveError}
+        </div>
+      )}
+
+      {/* Right-aligned Green Action Button */}
+      <div className="flex justify-end pt-1">
+        {isOrderedUjian ? (
+          <button
+            type="button"
+            disabled={submittingSession || feedbackState !== null}
+            onClick={handleUjianSubmit}
+            className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-60 whitespace-nowrap shrink-0"
+          >
+            <Check className="w-4 h-4" />
+            {submittingSession ? 'Menyimpan...' : 'Cek Jawaban'}
+          </button>
+        ) : (
+          <button
+            type="button"
+            disabled={submittingSession}
+            onClick={handleStandardNextOrFinish}
+            className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-60 whitespace-nowrap shrink-0"
+          >
+            {submittingSession
+              ? 'Menyimpan...'
+              : currentIndex + 1 >= sessionInstances.length
+                ? 'Selesaikan Ujian'
+                : 'Lanjut'}
+            <ArrowRight className="w-4 h-4" />
+          </button>
+        )}
+      </div>
+
+      {/* Animated SVG Feedback Overlay displayed directly on top of the active question page */}
       {isOrderedUjian && feedbackState !== null && (
         <ExamFeedbackOverlay
           status={feedbackState}
+          playKey={feedbackPlayKey}
           isLastQuestion={currentIndex + 1 >= sessionInstances.length}
           isExiting={feedbackExiting}
           onContinueNow={() => {

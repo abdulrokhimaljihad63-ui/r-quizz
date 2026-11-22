@@ -1,11 +1,9 @@
 import React, { useState } from 'react';
 import { Menu, X } from 'lucide-react';
-import { Footer } from './Footer';
 import { Logo } from './Logo';
 
 export type PlayerNavTab =
   | 'dashboard'
-  | 'modes'
   | 'leaderboard'
   | 'history'
   | 'profile';
@@ -21,7 +19,6 @@ interface PlayerLayoutProps {
 
 const NAV_ITEMS: Array<{ id: PlayerNavTab; label: string }> = [
   { id: 'dashboard', label: 'Beranda' },
-  { id: 'modes', label: 'Mode' },
   { id: 'leaderboard', label: 'Peringkat' },
   { id: 'history', label: 'Riwayat' },
   { id: 'profile', label: 'Profil' },
@@ -134,11 +131,9 @@ export const PlayerLayout: React.FC<PlayerLayoutProps> = ({
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+      <main className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-5">
         {children}
       </main>
-
-      <Footer />
     </div>
   );
 };

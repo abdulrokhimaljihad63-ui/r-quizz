@@ -1,12 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Check, Copy, Eye, EyeOff, KeyRound, LogOut, Save, ShieldCheck } from 'lucide-react';
+import { LogOut, Save, ShieldCheck } from 'lucide-react';
 import { COMPETITIVE_EXAM_MODES, MODE_META } from '../../constants/defaults';
 import { useAuth } from '../../contexts/AuthContext';
 import { getAllPlayerProgressForUser } from '../../services/firestoreService';
 import type { PlayerProgress } from '../../types';
 import { parseAbsenNumber } from '../../utils/dynamicAnswer';
 import { buildOrderedMilestoneSequence } from '../../utils/randomizer';
-import { getOrCreateLocalRecoveryCode } from '../../utils/recovery';
 import { formatDurationReadable } from '../../utils/scoring';
 
 interface ProfilePageProps {
@@ -17,7 +16,6 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onOpenAdminLogin }) =>
   const {
     player,
     renamePlayer,
-    savePreferences,
     logoutPlayer,
     questions,
     syntaxPaths,
@@ -32,8 +30,6 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onOpenAdminLogin }) =>
   const [nameMsg, setNameMsg] = useState<string | null>(null);
   const [nameErr, setNameErr] = useState<string | null>(null);
 
-  const [showRecovery, setShowRecovery] = useState(false);
-  const [copied, setCopied] = useState(false);
   const [progressList, setProgressList] = useState<PlayerProgress[]>([]);
 
   useEffect(() => {
@@ -60,7 +56,6 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onOpenAdminLogin }) =>
 
   if (!player) return null;
 
-  const recoveryCode = getOrCreateLocalRecoveryCode(player.uid);
   const totalOrderedCount = orderedMilestones.instances.length;
   const completedKeysSet = new Set(progressList.flatMap((p) => p.completedStageIds || []));
   const completedMilestoneCount = orderedMilestones.instances.filter(
@@ -89,25 +84,9 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onOpenAdminLogin }) =>
     }
   };
 
-  const handleCopyCode = async () => {
-    try {
-      await navigator.clipboard.writeText(recoveryCode);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // Fallback ignored
-    }
-  };
-
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">Profil &amp; Pengaturan Pemain</h1>
-        <p className="text-sm text-slate-600 mt-1">
-          Kelola nama tampilan, pantau akumulasi poin ujian, dan atur preferensi suara maupun
-          terminal.
-        </p>
-      </div>
+      <h1 className="text-2xl font-bold text-slate-900">Profil Pemain</h1>
 
       {/* Rename Form */}
       <section className="bg-white border border-slate-200 rounded-2xl p-6 space-y-4">
@@ -214,118 +193,25 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onOpenAdminLogin }) =>
         </p>
       </section>
 
-      {/* Recovery Code Section */}
-      <section className="bg-white border border-slate-200 rounded-2xl p-6 space-y-4">
-        <div className="flex items-start gap-3">
-          <KeyRound className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
-          <div className="space-y-1">
-            <h2 className="text-base font-bold text-slate-900">Kode Pemulihan Perangkat</h2>
-            <p className="text-xs text-slate-600 leading-relaxed">
-              Kode ini dibuat secara acak di perangkatmu dan tidak pernah ditampilkan di
-              leaderboard maupun disimpan sebagai teks mentah di database publik.
-            </p>
-          </div>
-        </div>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <button
+          type="button"
+          onClick={onOpenAdminLogin}
+          className="inline-flex items-center gap-2 px-4 py-2 text-xs font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50"
+        >
+          <ShieldCheck className="w-4 h-4 text-blue-600" />
+          Portal Admin
+        </button>
 
-        <div className="flex flex-wrap items-center gap-3 bg-slate-50 border border-slate-200 rounded-xl p-4">
-          <code className="font-mono text-sm font-semibold text-slate-900 tracking-wider flex-1">
-            {showRecovery ? recoveryCode : 'UKK-••••-••••-••••'}
-          </code>
-          <button
-            type="button"
-            onClick={() => setShowRecovery((prev) => !prev)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-100"
-          >
-            {showRecovery ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-            {showRecovery ? 'Sembunyikan' : 'Tampilkan'}
-          </button>
-          <button
-            type="button"
-            onClick={() => void handleCopyCode()}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100"
-          >
-            {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-            {copied ? 'Tersalin' : 'Salin Kode'}
-          </button>
-        </div>
-
-        <p className="text-xs text-slate-500 leading-relaxed">
-          Catatan arsitektur MVP: Karena login pemain menggunakan Firebase Anonymous Authentication
-          (tanpa backend custom-token berbayar), identitas UID Firebase terikat pada penyimpanan
-          browser perangkat ini. Simpan kode di atas sebagai catatan identitasmu apabila diperlukan
-          verifikasi manual oleh Admin/Guru.
-        </p>
-      </section>
-
-      {/* Preferences & Session */}
-      <section className="bg-white border border-slate-200 rounded-2xl p-6 space-y-4">
-        <h2 className="text-base font-bold text-slate-900">Preferensi &amp; Akses</h2>
-
-        <label className="flex items-center justify-between gap-4 cursor-pointer">
-          <div>
-            <p className="text-sm font-medium text-slate-800">
-              Aktifkan Suara Efek Evaluasi Ujian
-            </p>
-            <p className="text-xs text-slate-500">
-              Memutar fanfare saat jawaban benar dan bunyi &ldquo;tet toot&rdquo; saat jawaban salah
-              di mode Ujian.
-            </p>
-          </div>
-          <input
-            type="checkbox"
-            checked={player.preferences?.soundEnabled !== false}
-            onChange={(e) =>
-              void savePreferences({
-                soundEnabled: e.target.checked,
-                showKeyboardHints: player.preferences?.showKeyboardHints !== false,
-              })
-            }
-            className="w-4 h-4 accent-blue-600"
-          />
-        </label>
-
-        <label className="flex items-center justify-between gap-4 cursor-pointer pt-2 border-t border-slate-100">
-          <div>
-            <p className="text-sm font-medium text-slate-800">
-              Tampilkan Petunjuk Keyboard Terminal
-            </p>
-            <p className="text-xs text-slate-500">
-              Menampilkan keterangan tombol Backspace &amp; enter di bawah terminal.
-            </p>
-          </div>
-          <input
-            type="checkbox"
-            checked={player.preferences?.showKeyboardHints !== false}
-            onChange={(e) =>
-              void savePreferences({
-                soundEnabled: player.preferences?.soundEnabled !== false,
-                showKeyboardHints: e.target.checked,
-              })
-            }
-            className="w-4 h-4 accent-blue-600"
-          />
-        </label>
-
-        <div className="pt-4 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
-          <button
-            type="button"
-            onClick={onOpenAdminLogin}
-            className="inline-flex items-center gap-2 px-4 py-2 text-xs font-medium text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50"
-          >
-            <ShieldCheck className="w-4 h-4 text-blue-600" />
-            Portal Admin
-          </button>
-
-          <button
-            type="button"
-            onClick={() => void logoutPlayer()}
-            className="inline-flex items-center gap-2 px-4 py-2 text-xs font-medium text-red-600 border border-red-200 rounded-lg hover:bg-red-50"
-          >
-            <LogOut className="w-4 h-4" />
-            Keluar dari Sesi Perangkat Ini
-          </button>
-        </div>
-      </section>
+        <button
+          type="button"
+          onClick={() => void logoutPlayer()}
+          className="inline-flex items-center gap-2 px-4 py-2 text-xs font-medium text-red-600 bg-white border border-red-200 rounded-lg hover:bg-red-50"
+        >
+          <LogOut className="w-4 h-4" />
+          Keluar
+        </button>
+      </div>
     </div>
   );
 };

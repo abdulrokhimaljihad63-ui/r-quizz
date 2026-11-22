@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   ArrowRight,
   BookOpen,
+  Check,
   CheckCircle2,
   Lock,
   Shuffle,
@@ -29,7 +30,7 @@ interface SyntaxJourneyPageProps {
 }
 
 export const SyntaxJourneyPage: React.FC<SyntaxJourneyPageProps> = ({ onBackToModes }) => {
-  const { player, syntaxPaths, syntaxStages, questions, categories, settings } = useAuth();
+  const { player, syntaxPaths, syntaxStages, questions, settings } = useAuth();
 
   // Build ordered milestone sequence identically to Mode Ujian (never shuffled!)
   const milestoneSequence = useMemo(() => {
@@ -50,7 +51,7 @@ export const SyntaxJourneyPage: React.FC<SyntaxJourneyPageProps> = ({ onBackToMo
   const [loadingProgress, setLoadingProgress] = useState(false);
   const [activeMilestoneKey, setActiveMilestoneKey] = useState<string>('');
 
-  // Active variation override when user clicks "Acak Variasi Soal Lain"
+  // Active variation override when user clicks randomize variation
   const [activeVariation, setActiveVariation] = useState<{
     question: Question;
     promptUsed: string;
@@ -58,14 +59,9 @@ export const SyntaxJourneyPage: React.FC<SyntaxJourneyPageProps> = ({ onBackToMo
   } | null>(null);
   const [syntaxInput, setSyntaxInput] = useState('');
   const [stageCompletedNow, setStageCompletedNow] = useState(false);
+  const [checkError, setCheckError] = useState<string | null>(null);
   const [savingStage, setSavingStage] = useState(false);
   const [sessionUsedVarKeys, setSessionUsedVarKeys] = useState<Set<string>>(() => new Set());
-
-  const categoryNameMap = useMemo(() => {
-    const map = new Map<string, string>();
-    categories.forEach((c) => map.set(c.id, c.name));
-    return map;
-  }, [categories]);
 
   useEffect(() => {
     if (!player) return;
@@ -139,12 +135,14 @@ export const SyntaxJourneyPage: React.FC<SyntaxJourneyPageProps> = ({ onBackToMo
     });
     setSyntaxInput('');
     setStageCompletedNow(false);
+    setCheckError(null);
   }, [activeMilestoneKey, activeMilestone]);
 
   const handleRandomizeVariation = () => {
     if (!player || !activeMilestone) return;
     setSyntaxInput('');
     setStageCompletedNow(false);
+    setCheckError(null);
 
     const q = activeMilestone.question;
     const totalPrompts = 1 + q.promptVariations.filter((v) => v.trim().length > 0).length;
@@ -165,6 +163,10 @@ export const SyntaxJourneyPage: React.FC<SyntaxJourneyPageProps> = ({ onBackToMo
 
   const handleCompleteMilestone = async () => {
     if (!player || !activeMilestone?.milestoneKey || !activeVariation) return;
+    if (syntaxInput.trim().length === 0) {
+      setCheckError('Ketik jawaban terlebih dahulu.');
+      return;
+    }
     const resolvedInfo = resolveQuestionExpectedAnswers(
       activeVariation.question,
       player.absenNumber,
@@ -174,8 +176,12 @@ export const SyntaxJourneyPage: React.FC<SyntaxJourneyPageProps> = ({ onBackToMo
       resolvedInfo.resolvedAnswers,
       resolvedInfo.syntaxCheckMode,
     );
-    if (!evalRes.isCompleteMatch) return;
+    if (!evalRes.isCompleteMatch) {
+      setCheckError('Sintaks belum sesuai, periksa kembali bagian yang berwarna merah.');
+      return;
+    }
 
+    setCheckError(null);
     setSavingStage(true);
     try {
       const mKey = activeMilestone.milestoneKey;
@@ -235,7 +241,7 @@ export const SyntaxJourneyPage: React.FC<SyntaxJourneyPageProps> = ({ onBackToMo
             className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
-            Kembali ke Pilihan Mode
+            Kembali ke Beranda
           </button>
         )}
       </div>
@@ -254,14 +260,6 @@ export const SyntaxJourneyPage: React.FC<SyntaxJourneyPageProps> = ({ onBackToMo
     ? resolveQuestionExpectedAnswers(activeVariation.question, player.absenNumber)
     : null;
 
-  const isMatch = resolvedVariationInfo
-    ? evaluateSyntaxWithAlternatives(
-        syntaxInput,
-        resolvedVariationInfo.resolvedAnswers,
-        resolvedVariationInfo.syntaxCheckMode,
-      ).isCompleteMatch
-    : false;
-
   const nextMilestone =
     activeMilestoneIndex >= 0 && activeMilestoneIndex + 1 < orderedMilestones.length
       ? orderedMilestones[activeMilestoneIndex + 1]
@@ -272,237 +270,169 @@ export const SyntaxJourneyPage: React.FC<SyntaxJourneyPageProps> = ({ onBackToMo
     : 0;
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <p className="text-xs font-semibold text-blue-600">
-            Mode Latihan Bebas · Tanpa Nilai &amp; Tanpa Leaderboard
-          </p>
-          <h1 className="text-2xl font-bold text-slate-900 mt-0.5">
-            Hanya Latihan — Perjalanan Sintaks Berurutan
-          </h1>
-          <p className="text-sm text-slate-600 mt-1">
-            Pelajari seluruh soal sintaks secara berurutan dengan petunjuk dan koreksi warna
-            real-time. Mode ini tidak dihitung skor dan tidak memengaruhi peringkat leaderboard.
-          </p>
+    <div className="max-w-4xl mx-auto space-y-4">
+      {/* Compact Header & Progress Row (unboxed) */}
+      <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-200">
+        <div className="space-y-1.5">
+          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
+            <span className="font-semibold text-slate-900">Hanya Latihan</span>
+            <span aria-hidden="true">·</span>
+            <span className="tabular-nums">
+              Tahap {activeMilestoneIndex + 1} dari {orderedMilestones.length} ({percent}%)
+            </span>
+          </div>
+          <div className="w-48 sm:w-64 h-1.5 bg-slate-200 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-emerald-600 transition-all duration-300"
+              style={{ width: `${percent}%` }}
+            />
+          </div>
         </div>
 
         {onBackToModes && (
           <button
             type="button"
             onClick={onBackToModes}
-            className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors self-start shrink-0"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 hover:text-slate-900 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors whitespace-nowrap shrink-0"
           >
-            <ArrowLeft className="w-4 h-4" />
-            Kembali ke Mode
+            <ArrowLeft className="w-3.5 h-3.5" />
+            Keluar
           </button>
         )}
       </div>
 
-      {/* Horizontal Progress Track */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <h2 className="text-base font-bold text-slate-900">Jalur Latihan Modul UKK</h2>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Urutan soal sama persis dengan soal yang diujikan pada mode Ujian.
-            </p>
-          </div>
-          <span className="text-xs font-semibold text-blue-700 tabular-nums">
-            {completedCount} / {orderedMilestones.length} Milestone ({percent}%)
-          </span>
-        </div>
+      {/* Compact Milestone Stage Strip (unboxed) */}
+      <div className="overflow-x-auto thin-scrollbar pb-1">
+        <div className="flex items-center gap-2 min-w-max">
+          {orderedMilestones.map((m, idx) => {
+            const mKey = m.milestoneKey || `m_${idx}`;
+            const isDone = completedSet.has(mKey);
+            const isUnlocked = idx <= firstIncompleteIdx || isDone;
+            const isCurrent = mKey === activeMilestoneKey;
 
-        <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
-          <div
-            className="h-full bg-blue-600 transition-all duration-300"
-            style={{ width: `${percent}%` }}
-          />
-        </div>
-
-        <div className="overflow-x-auto thin-scrollbar pb-2">
-          <div className="flex items-stretch gap-3 min-w-max py-1">
-            {orderedMilestones.map((m, idx) => {
-              const mKey = m.milestoneKey || `m_${idx}`;
-              const isDone = completedSet.has(mKey);
-              const isUnlocked = idx <= firstIncompleteIdx || isDone;
-              const isCurrent = mKey === activeMilestoneKey;
-
-              return (
-                <button
-                  key={mKey}
-                  type="button"
-                  disabled={!isUnlocked}
-                  onClick={() => setActiveMilestoneKey(mKey)}
-                  className={`w-48 text-left p-3.5 rounded-xl border transition-colors flex flex-col justify-between gap-2 shrink-0 ${
-                    isCurrent
-                      ? 'border-blue-600 bg-blue-50/70 ring-1 ring-blue-600'
-                      : isDone
-                        ? 'border-emerald-200 bg-emerald-50/50 hover:border-emerald-300'
-                        : isUnlocked
-                          ? 'border-slate-200 bg-white hover:border-blue-300'
-                          : 'border-slate-200 bg-slate-50 text-slate-400 cursor-not-allowed'
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-2 text-xs">
-                    <span className="font-mono font-semibold tabular-nums">Tahap {idx + 1}</span>
-                    {isDone ? (
-                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                    ) : !isUnlocked ? (
-                      <Lock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                    ) : (
-                      <span className="text-blue-600 font-medium">Aktif</span>
-                    )}
-                  </div>
-                  <div>
-                    <p className="text-[11px] text-slate-500 truncate">
-                      {m.chapterTitle ||
-                        categoryNameMap.get(m.question.categoryId) ||
-                        m.question.categoryId}
-                    </p>
-                    <p className="text-xs font-semibold text-slate-900 line-clamp-2 mt-0.5">
-                      {m.milestoneTitle || m.question.title}
-                    </p>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
+            return (
+              <button
+                key={mKey}
+                type="button"
+                disabled={!isUnlocked}
+                onClick={() => setActiveMilestoneKey(mKey)}
+                className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
+                  isCurrent
+                    ? 'border-emerald-600 bg-emerald-50 text-emerald-900 font-semibold'
+                    : isDone
+                      ? 'border-emerald-200 bg-white text-emerald-700 hover:border-emerald-300'
+                      : isUnlocked
+                        ? 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
+                        : 'border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed'
+                }`}
+              >
+                <span className="font-mono tabular-nums">Tahap {idx + 1}</span>
+                {isDone ? (
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                ) : !isUnlocked ? (
+                  <Lock className="w-3 h-3 text-slate-400 shrink-0" />
+                ) : null}
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      {/* Active Milestone Stage Workspace */}
+      {/* Active Question Workspace (unboxed) */}
       {loadingProgress ? (
-        <div className="bg-white border border-slate-200 rounded-2xl p-8 text-center text-sm text-slate-500">
-          Memuat progres latihan...
-        </div>
+        <p className="text-sm text-slate-500 py-4">Memuat progres latihan...</p>
       ) : activeMilestone ? (
-        <div className="bg-white border border-slate-200 rounded-2xl p-6 sm:p-8 space-y-5">
+        <div className="space-y-4">
+          {/* Competency (smaller, gray) & Question Prompt (larger, black) */}
           <div className="space-y-1.5">
-            <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
-              <span className="font-semibold text-blue-600 tabular-nums">
-                Milestone {activeMilestoneIndex + 1} dari {orderedMilestones.length}
-              </span>
-              <span aria-hidden="true">·</span>
-              <span>
-                {categoryNameMap.get(activeMilestone.question.categoryId) ||
-                  activeMilestone.question.categoryId}
-              </span>
-              {activeMilestone.milestoneKey && completedSet.has(activeMilestone.milestoneKey) && (
-                <>
-                  <span aria-hidden="true">·</span>
-                  <span className="font-semibold text-emerald-700">Sudah Selesai</span>
-                </>
-              )}
-            </div>
-            <h3 className="text-xl font-bold text-slate-900">
+            <p className="text-xs sm:text-sm font-medium text-slate-500">
               {activeMilestone.milestoneTitle || activeMilestone.question.title}
-            </h3>
-            {activeMilestone.milestoneDescription && (
-              <p className="text-sm text-slate-600">{activeMilestone.milestoneDescription}</p>
+            </p>
+            {activeVariation && (
+              <h1 className="text-lg sm:text-xl font-semibold text-slate-950 leading-snug whitespace-pre-line">
+                {activeVariation.promptUsed}
+              </h1>
             )}
           </div>
 
           {!activeVariation ? (
-            <div className="rounded-xl bg-amber-50 border border-amber-200 p-4 flex items-start gap-3 text-sm text-amber-900">
-              <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-              <p>Soal untuk milestone ini belum tersedia.</p>
+            <div className="rounded-xl bg-amber-50 border border-amber-200 p-3 flex items-center gap-2.5 text-sm text-amber-900">
+              <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+              <p>Soal untuk tahap ini belum tersedia.</p>
             </div>
           ) : (
-            <div className="space-y-4">
-              <div className="rounded-xl bg-slate-50 border border-slate-200 p-4 space-y-1.5">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-xs font-semibold text-slate-500">
-                    Instruksi Soal {totalVariantsForQuestion > 1 ? '(Variasi Acak)' : ''}
-                  </p>
-                  <div className="flex flex-wrap items-center gap-2">
-                    {resolvedVariationInfo?.answerMode === 'dynamic' && player.absenNumber && (
-                      <span className="text-[11px] font-mono font-medium text-blue-700">
-                        Soal Dinamis (Absen {player.absenNumber})
-                      </span>
-                    )}
-                    {resolvedVariationInfo?.syntaxCheckMode === 'flexible_order' && (
-                      <span className="text-[11px] font-medium text-amber-700">
-                        Urutan Kata Bebas
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <p className="text-sm sm:text-base text-slate-800 leading-relaxed whitespace-pre-line">
-                  {activeVariation.promptUsed}
-                </p>
-              </div>
-
+            <>
               <SyntaxTerminal
                 expectedAnswers={resolvedVariationInfo?.resolvedAnswers || []}
                 syntaxCheckMode={resolvedVariationInfo?.syntaxCheckMode || 'exact'}
                 value={syntaxInput}
-                onChange={setSyntaxInput}
+                onChange={(nextVal) => {
+                  setSyntaxInput(nextVal);
+                  if (checkError) setCheckError(null);
+                }}
                 onSubmit={() => {
-                  if (isMatch && !stageCompletedNow) {
+                  if (!stageCompletedNow) {
                     void handleCompleteMilestone();
                   }
                 }}
                 hint={activeVariation.question.hint}
               />
 
+              {checkError && !stageCompletedNow && (
+                <p className="text-xs font-medium text-red-600">{checkError}</p>
+              )}
+
               {stageCompletedNow && (
-                <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-4 space-y-2">
-                  <div className="flex items-center gap-2 text-sm font-semibold text-emerald-800">
-                    <CheckCircle2 className="w-4 h-4 shrink-0" />
-                    Milestone Selesai &amp; Progres Disimpan!
-                  </div>
-                  {activeVariation.question.explanation && (
-                    <p className="text-xs sm:text-sm text-emerald-900 leading-relaxed">
-                      {activeVariation.question.explanation}
-                    </p>
-                  )}
+                <div className="rounded-lg bg-emerald-50 border border-emerald-200 px-3.5 py-2.5 text-xs sm:text-sm text-emerald-900 flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span className="font-medium">
+                    Jawaban benar!{activeVariation.question.explanation ? ` ${activeVariation.question.explanation}` : ''}
+                  </span>
                 </div>
               )}
 
-              <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
-                {totalVariantsForQuestion > 1 ? (
+              <div
+                className={`flex flex-wrap items-center gap-3 pt-1 ${
+                  totalVariantsForQuestion > 1 ? 'justify-between' : 'justify-end'
+                }`}
+              >
+                {totalVariantsForQuestion > 1 && (
                   <button
                     type="button"
                     onClick={handleRandomizeVariation}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium text-slate-700 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors"
+                    className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors whitespace-nowrap shrink-0"
                   >
                     <Shuffle className="w-3.5 h-3.5" />
-                    Acak Variasi Soal Lain
+                    Acak Variasi Soal
                   </button>
-                ) : (
-                  <span className="text-xs text-slate-500">
-                    Mode latihan bebas tanpa perhitungan poin
-                  </span>
                 )}
 
-                <div className="flex items-center gap-3">
-                  {!stageCompletedNow ? (
-                    <button
-                      type="button"
-                      disabled={!isMatch || savingStage}
-                      onClick={handleCompleteMilestone}
-                      className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors disabled:bg-slate-200 disabled:text-slate-500 disabled:cursor-not-allowed"
-                    >
-                      {savingStage ? 'Menyimpan Progres...' : 'Selesaikan Milestone'}
-                    </button>
-                  ) : nextMilestone?.milestoneKey ? (
-                    <button
-                      type="button"
-                      onClick={() => setActiveMilestoneKey(nextMilestone.milestoneKey || '')}
-                      className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 transition-colors"
-                    >
-                      Lanjut ke Tahap {activeMilestoneIndex + 2}
-                      <ArrowRight className="w-4 h-4" />
-                    </button>
-                  ) : (
-                    <span className="text-sm font-semibold text-emerald-700">
-                      Seluruh Milestone Latihan Selesai!
-                    </span>
-                  )}
-                </div>
+                {!stageCompletedNow ? (
+                  <button
+                    type="button"
+                    disabled={savingStage}
+                    onClick={handleCompleteMilestone}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-60 whitespace-nowrap shrink-0"
+                  >
+                    <Check className="w-4 h-4" />
+                    {savingStage ? 'Menyimpan...' : 'Cek Jawaban'}
+                  </button>
+                ) : nextMilestone?.milestoneKey ? (
+                  <button
+                    type="button"
+                    onClick={() => setActiveMilestoneKey(nextMilestone.milestoneKey || '')}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 transition-colors whitespace-nowrap shrink-0"
+                  >
+                    Lanjut ke Tahap {activeMilestoneIndex + 2}
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+                ) : (
+                  <span className="text-sm font-semibold text-emerald-700">
+                    Seluruh Latihan Selesai!
+                  </span>
+                )}
               </div>
-            </div>
+            </>
           )}
         </div>
       ) : null}

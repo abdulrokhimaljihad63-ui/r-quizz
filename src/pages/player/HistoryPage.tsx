@@ -1,20 +1,17 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { BookOpen, ChevronDown, ChevronUp, History } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { ChevronDown, ChevronUp, History } from 'lucide-react';
 import { MODE_META } from '../../constants/defaults';
 import { useAuth } from '../../contexts/AuthContext';
 import {
-  getAllPlayerProgressForUser,
   getPlayerSessions,
   getSessionAnswers,
 } from '../../services/firestoreService';
-import type { GameSession, PlayerProgress, SessionAnswer } from '../../types';
-import { buildOrderedMilestoneSequence } from '../../utils/randomizer';
+import type { GameSession, SessionAnswer } from '../../types';
 import { formatDurationReadable } from '../../utils/scoring';
 
 export const HistoryPage: React.FC = () => {
-  const { player, questions, syntaxPaths, syntaxStages, settings } = useAuth();
+  const { player } = useAuth();
   const [sessions, setSessions] = useState<GameSession[]>([]);
-  const [progressList, setProgressList] = useState<PlayerProgress[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [answersBySession, setAnswersBySession] = useState<Record<string, SessionAnswer[]>>({});
@@ -23,32 +20,14 @@ export const HistoryPage: React.FC = () => {
   useEffect(() => {
     if (!player) return;
     setLoading(true);
-    Promise.all([getPlayerSessions(player.uid), getAllPlayerProgressForUser(player.uid)])
-      .then(([sessList, progList]) => {
+    getPlayerSessions(player.uid)
+      .then((sessList) => {
         setSessions(
           sessList.filter((s) => s.mode !== 'practice_only' && s.mode !== 'syntax_journey'),
         );
-        setProgressList(progList);
       })
       .finally(() => setLoading(false));
   }, [player]);
-
-  const orderedMilestones = useMemo(
-    () =>
-      buildOrderedMilestoneSequence(
-        questions,
-        syntaxPaths,
-        syntaxStages,
-        player?.uid || '',
-        settings.prioritizeUnseenVariations,
-      ),
-    [questions, syntaxPaths, syntaxStages, player?.uid, settings.prioritizeUnseenVariations],
-  );
-
-  const completedKeysSet = new Set(progressList.flatMap((p) => p.completedStageIds || []));
-  const completedMilestoneCount = orderedMilestones.instances.filter(
-    (m) => m.milestoneKey && completedKeysSet.has(m.milestoneKey),
-  ).length;
 
   const toggleExpand = async (sessionId: string) => {
     if (expandedId === sessionId) {
@@ -68,34 +47,8 @@ export const HistoryPage: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="space-y-1">
-        <h1 className="text-2xl font-bold text-slate-900">Riwayat Ujian</h1>
-        <p className="text-sm text-slate-600">
-          Setiap sesi ujian tercatat terpisah beserta poin dan total waktu pengerjaannya.
-        </p>
-      </div>
-
-      {/* Practice Milestone Progress Summary */}
-      <div className="bg-white border border-slate-200 rounded-xl p-4 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <BookOpen className="w-5 h-5 text-emerald-600 shrink-0" />
-          <div>
-            <p className="text-xs font-semibold text-slate-800">
-              Progres Mode Hanya Latihan (Non-Nilai)
-            </p>
-            <p className="text-xs text-slate-500 tabular-nums">
-              {completedMilestoneCount} dari {orderedMilestones.instances.length} milestone latihan
-              telah diselesaikan.
-            </p>
-          </div>
-        </div>
-        <span className="text-xs font-mono font-bold text-emerald-700 tabular-nums">
-          {orderedMilestones.instances.length > 0
-            ? `${Math.round((completedMilestoneCount / orderedMilestones.instances.length) * 100)}%`
-            : '0%'}
-        </span>
-      </div>
+    <div className="space-y-5">
+      <h1 className="text-2xl font-bold text-slate-900">Riwayat Ujian</h1>
 
       {loading ? (
         <div className="bg-white border border-slate-200 rounded-2xl p-8 text-center text-sm text-slate-500">

@@ -14,7 +14,6 @@ import { ManageSyntaxJourneyPage } from './pages/admin/ManageSyntaxJourneyPage';
 import { DashboardPage } from './pages/player/DashboardPage';
 import { HistoryPage } from './pages/player/HistoryPage';
 import { LeaderboardPage } from './pages/player/LeaderboardPage';
-import { ModeSelectPage } from './pages/player/ModeSelectPage';
 import { ProfilePage } from './pages/player/ProfilePage';
 import { QuizSessionPage } from './pages/player/QuizSessionPage';
 import { ResultsPage } from './pages/player/ResultsPage';
@@ -157,7 +156,7 @@ function AppRouter() {
       setActiveQuiz(null);
       setLastResult(null);
       setActivePractice(true);
-      setPlayerTab('modes');
+      setPlayerTab('dashboard');
       return;
     }
     setActivePractice(false);
@@ -188,7 +187,7 @@ function AppRouter() {
         <SyntaxJourneyPage
           onBackToModes={() => {
             setActivePractice(false);
-            setPlayerTab('modes');
+            setPlayerTab('dashboard');
           }}
         />
       ) : activeQuiz ? (
@@ -202,7 +201,7 @@ function AppRouter() {
           }}
           onExit={() => {
             setActiveQuiz(null);
-            setPlayerTab('modes');
+            setPlayerTab('dashboard');
           }}
         />
       ) : lastResult ? (
@@ -222,7 +221,6 @@ function AppRouter() {
           {playerTab === 'dashboard' && (
             <DashboardPage onNavigate={navigatePlayer} onStartMode={startQuiz} />
           )}
-          {playerTab === 'modes' && <ModeSelectPage onStartMode={startQuiz} />}
           {playerTab === 'leaderboard' && <LeaderboardPage />}
           {playerTab === 'history' && <HistoryPage />}
           {playerTab === 'profile' && (
