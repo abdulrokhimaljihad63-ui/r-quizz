@@ -8,13 +8,21 @@ import { formatDurationReadable } from '../../utils/scoring';
 export const AdminResultsPage: React.FC = () => {
   const [sessions, setSessions] = useState<GameSession[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [filterMode, setFilterMode] = useState<string>('all');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [answersMap, setAnswersMap] = useState<Record<string, SessionAnswer[]>>({});
+  const [loadingAnswersId, setLoadingAnswersId] = useState<string | null>(null);
+  const [answersErrorMap, setAnswersErrorMap] = useState<Record<string, string>>({});
 
   useEffect(() => {
+    setLoading(true);
+    setLoadError(null);
     getAllSessions()
       .then(setSessions)
+      .catch((err) => {
+        setLoadError(err instanceof Error ? err.message : 'Gagal memuat hasil permainan.');
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -27,8 +35,23 @@ export const AdminResultsPage: React.FC = () => {
     }
     setExpandedId(sessionId);
     if (!answersMap[sessionId]) {
-      const list = await getSessionAnswers(sessionId);
-      setAnswersMap((prev) => ({ ...prev, [sessionId]: list }));
+      setLoadingAnswersId(sessionId);
+      setAnswersErrorMap((prev) => {
+        const next = { ...prev };
+        delete next[sessionId];
+        return next;
+      });
+      try {
+        const list = await getSessionAnswers(sessionId);
+        setAnswersMap((prev) => ({ ...prev, [sessionId]: list }));
+      } catch (err) {
+        setAnswersErrorMap((prev) => ({
+          ...prev,
+          [sessionId]: err instanceof Error ? err.message : 'Gagal memuat detail jawaban sesi ini.',
+        }));
+      } finally {
+        setLoadingAnswersId(null);
+      }
     }
   };
 
@@ -61,6 +84,10 @@ export const AdminResultsPage: React.FC = () => {
       {loading ? (
         <div className="bg-white border border-slate-200 rounded-2xl p-8 text-center text-sm text-slate-500">
           Memuat seluruh hasil sesi...
+        </div>
+      ) : loadError ? (
+        <div className="bg-red-50 border border-red-200 rounded-2xl p-6 text-center text-sm text-red-700">
+          {loadError}
         </div>
       ) : filtered.length === 0 ? (
         <div className="bg-white border border-slate-200 rounded-2xl p-10 text-center space-y-2">
@@ -110,7 +137,12 @@ export const AdminResultsPage: React.FC = () => {
 
                 {isOpen && (
                   <div className="border-t border-slate-200 bg-slate-50 p-4 space-y-2 text-xs">
-                    {answers.map((a, idx) => (
+                    {loadingAnswersId === s.id ? (
+                      <p className="text-slate-500 py-2">Memuat detail jawaban...</p>
+                    ) : answersErrorMap[s.id] ? (
+                      <p className="text-red-600 py-2">{answersErrorMap[s.id]}</p>
+                    ) : (
+                      answers.map((a, idx) => (
                       <div
                         key={a.id}
                         className="bg-white border border-slate-200 rounded-lg p-3 flex flex-wrap items-start justify-between gap-2"
@@ -174,7 +206,8 @@ export const AdminResultsPage: React.FC = () => {
                           Skor: {a.pointsEarned}/{a.maxPoints}
                         </span>
                       </div>
-                    ))}
+                      ))
+                    )}
                   </div>
                 )}
               </div>

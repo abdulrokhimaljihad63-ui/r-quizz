@@ -18,6 +18,7 @@ export const ManageCategoriesPage: React.FC = () => {
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const openNew = () => {
     setEditingId(null);
@@ -27,6 +28,7 @@ export const ManageCategoriesPage: React.FC = () => {
     setActive(true);
     setShowForm(true);
     setFeedback(null);
+    setErrorMsg(null);
   };
 
   const openEdit = (cat: Category) => {
@@ -37,24 +39,31 @@ export const ManageCategoriesPage: React.FC = () => {
     setActive(cat.active);
     setShowForm(true);
     setFeedback(null);
+    setErrorMsg(null);
   };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) return;
+    if (!name.trim() || saving) return;
     setSaving(true);
     setFeedback(null);
+    setErrorMsg(null);
     try {
       await saveCategory(editingId, { name, description, active, orderIndex });
       setShowForm(false);
       setFeedback(editingId ? 'Kategori diperbarui.' : 'Kategori baru ditambahkan.');
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Gagal menyimpan kategori.');
     } finally {
       setSaving(false);
     }
   };
 
   const handleSeedInitial = async () => {
+    if (saving) return;
     setSaving(true);
+    setFeedback(null);
+    setErrorMsg(null);
     try {
       const added = await seedInitialCategories();
       setFeedback(
@@ -62,12 +71,34 @@ export const ManageCategoriesPage: React.FC = () => {
           ? `${added} kategori awal RQuizz berhasil dimuat.`
           : 'Semua kategori awal RQuizz sudah ada.',
       );
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Gagal memuat kategori awal.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleToggleActive = async (cat: Category) => {
+    if (saving) return;
+    setSaving(true);
+    setErrorMsg(null);
+    try {
+      await saveCategory(cat.id, {
+        name: cat.name,
+        description: cat.description,
+        active: !cat.active,
+        orderIndex: cat.orderIndex,
+      });
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Gagal mengubah status kategori.');
     } finally {
       setSaving(false);
     }
   };
 
   const handleDelete = async (cat: Category) => {
+    if (saving) return;
+    setErrorMsg(null);
     const count = questions.filter((q) => q.categoryId === cat.id).length;
     if (count > 0) {
       setFeedback(
@@ -75,8 +106,15 @@ export const ManageCategoriesPage: React.FC = () => {
       );
       return;
     }
-    await deleteCategory(cat.id);
-    setFeedback(`Kategori "${cat.name}" dihapus.`);
+    setSaving(true);
+    try {
+      await deleteCategory(cat.id);
+      setFeedback(`Kategori "${cat.name}" dihapus.`);
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Gagal menghapus kategori.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -108,6 +146,12 @@ export const ManageCategoriesPage: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {errorMsg && (
+        <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-xs text-red-800">
+          {errorMsg}
+        </div>
+      )}
 
       {feedback && (
         <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 text-xs text-blue-900">
@@ -240,15 +284,9 @@ export const ManageCategoriesPage: React.FC = () => {
                       <td className="py-3 px-4">
                         <button
                           type="button"
-                          onClick={() =>
-                            void saveCategory(cat.id, {
-                              name: cat.name,
-                              description: cat.description,
-                              active: !cat.active,
-                              orderIndex: cat.orderIndex,
-                            })
-                          }
-                          className={`text-xs font-semibold ${
+                          disabled={saving}
+                          onClick={() => void handleToggleActive(cat)}
+                          className={`text-xs font-semibold disabled:opacity-50 ${
                             cat.active ? 'text-emerald-700' : 'text-slate-400'
                           }`}
                         >

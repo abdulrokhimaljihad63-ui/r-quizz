@@ -13,20 +13,33 @@ export const HistoryPage: React.FC = () => {
   const { player } = useAuth();
   const [sessions, setSessions] = useState<GameSession[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [answersBySession, setAnswersBySession] = useState<Record<string, SessionAnswer[]>>({});
   const [loadingAnswersId, setLoadingAnswersId] = useState<string | null>(null);
+  const [answersErrorBySession, setAnswersErrorBySession] = useState<Record<string, string>>({});
 
-  useEffect(() => {
+  const fetchSessions = () => {
     if (!player) return;
     setLoading(true);
+    setLoadError(null);
     getPlayerSessions(player.uid)
       .then((sessList) => {
         setSessions(
           sessList.filter((s) => s.mode !== 'practice_only' && s.mode !== 'syntax_journey'),
         );
       })
+      .catch((err) => {
+        setLoadError(
+          err instanceof Error ? err.message : 'Gagal memuat riwayat ujian. Periksa koneksi Anda.',
+        );
+      })
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    fetchSessions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [player]);
 
   const toggleExpand = async (sessionId: string) => {
@@ -37,9 +50,20 @@ export const HistoryPage: React.FC = () => {
     setExpandedId(sessionId);
     if (!answersBySession[sessionId]) {
       setLoadingAnswersId(sessionId);
+      setAnswersErrorBySession((prev) => {
+        const next = { ...prev };
+        delete next[sessionId];
+        return next;
+      });
       try {
         const list = await getSessionAnswers(sessionId);
         setAnswersBySession((prev) => ({ ...prev, [sessionId]: list }));
+      } catch (err) {
+        setAnswersErrorBySession((prev) => ({
+          ...prev,
+          [sessionId]:
+            err instanceof Error ? err.message : 'Gagal memuat detail jawaban sesi ini.',
+        }));
       } finally {
         setLoadingAnswersId(null);
       }
@@ -53,6 +77,17 @@ export const HistoryPage: React.FC = () => {
       {loading ? (
         <div className="rquizz-panel rounded-2xl p-8 text-center text-sm text-slate-300">
           Memuat riwayat ujian...
+        </div>
+      ) : loadError ? (
+        <div className="rquizz-panel rounded-2xl p-6 text-center space-y-3 border border-rose-400/40">
+          <p className="text-sm font-semibold text-rose-300">{loadError}</p>
+          <button
+            type="button"
+            onClick={fetchSessions}
+            className="px-4 py-2 text-xs font-bold text-slate-950 bg-cyan-400 rounded-lg hover:bg-cyan-300 transition-colors"
+          >
+            Muat Ulang
+          </button>
         </div>
       ) : sessions.length === 0 ? (
         <div className="rquizz-panel rounded-2xl p-10 text-center space-y-2">
@@ -150,6 +185,8 @@ export const HistoryPage: React.FC = () => {
 
                     {loadingAnswersId === sess.id ? (
                       <p className="text-xs text-slate-300">Memuat detail jawaban...</p>
+                    ) : answersErrorBySession[sess.id] ? (
+                      <p className="text-xs text-rose-300">{answersErrorBySession[sess.id]}</p>
                     ) : (
                       <div className="space-y-2">
                         {answers.map((a, i) => (

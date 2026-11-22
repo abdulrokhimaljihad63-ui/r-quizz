@@ -24,6 +24,23 @@ export const GameSettingsPage: React.FC = () => {
     setError(null);
     setSavedMsg(null);
 
+    const isIntInRange = (val: number, min: number, max: number) =>
+      Number.isInteger(val) && val >= min && val <= max;
+
+    if (!isIntInRange(form.examTotalQuestions, 1, 100)) {
+      setError('Target Total Soal Ujian Acak harus bilangan bulat antara 1 sampai 100.');
+      return;
+    }
+
+    if (
+      !isIntInRange(form.examGuidedCount, 0, 100) ||
+      !isIntInRange(form.examBlindCount, 0, 100) ||
+      !isIntInRange(form.examTroubleshootingCount, 0, 100)
+    ) {
+      setError('Jumlah tiap jenis soal pada komposisi Ujian Acak harus bilangan bulat 0 sampai 100.');
+      return;
+    }
+
     if (compositionSum !== form.examTotalQuestions) {
       setError(
         `Total komposisi Ujian Latihan Soal Acak (${compositionSum}) harus sama persis dengan Target Total Soal (${form.examTotalQuestions}).`,
@@ -31,8 +48,13 @@ export const GameSettingsPage: React.FC = () => {
       return;
     }
 
-    if (form.troubleshootQuestionCount < 1 || form.troubleshootQuestionCount > 100) {
-      setError('Jumlah soal Mode Troubleshoot harus antara 1 sampai 100.');
+    if (!isIntInRange(form.troubleshootQuestionCount, 1, 100)) {
+      setError('Jumlah soal Mode Troubleshoot harus bilangan bulat antara 1 sampai 100.');
+      return;
+    }
+
+    if (!isIntInRange(form.examTimeLimitSeconds, 60, 14400)) {
+      setError('Batas waktu ujian harus bilangan bulat antara 60 detik (1 menit) sampai 14400 detik (4 jam).');
       return;
     }
 

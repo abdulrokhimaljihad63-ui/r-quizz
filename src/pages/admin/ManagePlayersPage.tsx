@@ -12,13 +12,18 @@ export const ManagePlayersPage: React.FC = () => {
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const loadPlayers = () => {
     setLoading(true);
+    setErrorMsg(null);
     getAllPlayers()
       .then((items) => {
         setPlayers(items);
         setSelectedUids(new Set());
+      })
+      .catch((err) => {
+        setErrorMsg(err instanceof Error ? err.message : 'Gagal memuat data pemain.');
       })
       .finally(() => setLoading(false));
   };
@@ -52,9 +57,10 @@ export const ManagePlayersPage: React.FC = () => {
   };
 
   const handleDeleteSelected = async () => {
-    if (selectedUids.size === 0) return;
+    if (selectedUids.size === 0 || deleting) return;
     setDeleting(true);
     setSuccessMsg(null);
+    setErrorMsg(null);
     try {
       const res = await deletePlayerAndAssociatedData(Array.from(selectedUids));
       setSuccessMsg(
@@ -63,7 +69,8 @@ export const ManagePlayersPage: React.FC = () => {
       setShowConfirmModal(false);
       loadPlayers();
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Gagal menghapus profil.');
+      setErrorMsg(err instanceof Error ? err.message : 'Gagal menghapus profil.');
+      setShowConfirmModal(false);
     } finally {
       setDeleting(false);
     }
@@ -103,6 +110,12 @@ export const ManagePlayersPage: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {errorMsg && (
+        <div className="rounded-xl bg-red-50 border border-red-200 p-4 text-sm text-red-800">
+          {errorMsg}
+        </div>
+      )}
 
       {successMsg && (
         <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-4 text-sm text-emerald-900">

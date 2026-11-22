@@ -164,6 +164,7 @@ export const QuizSessionPage: React.FC<QuizSessionPageProps> = ({
 
   const finalizedRef = useRef(false);
   const submitLockRef = useRef(false);
+  const standardLockRef = useRef(false);
   const pendingNextAnswersRef = useRef<DraftAnswer[] | null>(null);
   const autoAdvanceTimerRef = useRef<number | null>(null);
   const exitAnimTimerRef = useRef<number | null>(null);
@@ -380,6 +381,8 @@ export const QuizSessionPage: React.FC<QuizSessionPageProps> = ({
         onFinish(result);
       } catch (err) {
         finalizedRef.current = false;
+        submitLockRef.current = false;
+        standardLockRef.current = false;
         setSubmittingSession(false);
         setSaveError(err instanceof Error ? err.message : 'Gagal menyimpan hasil sesi.');
       }
@@ -398,39 +401,61 @@ export const QuizSessionPage: React.FC<QuizSessionPageProps> = ({
     ],
   );
 
-  // Timer effect
+  // Keep latest callbacks/values in refs so the 1s timer interval is never reset on typing
+  const buildDraftRef = useRef(buildCurrentDraftAnswer);
+  const collectedAnswersRef = useRef(collectedAnswers);
+  const finalizeSessionRef = useRef(finalizeSession);
+  useEffect(() => {
+    buildDraftRef.current = buildCurrentDraftAnswer;
+  }, [buildCurrentDraftAnswer]);
+  useEffect(() => {
+    collectedAnswersRef.current = collectedAnswers;
+  }, [collectedAnswers]);
+  useEffect(() => {
+    finalizeSessionRef.current = finalizeSession;
+  }, [finalizeSession]);
+
+  // Timer tick effect (isolated from input state changes)
   useEffect(() => {
     if (!examShortfallConfirmed || sessionInstances.length === 0 || submittingSession) return;
 
     const timer = window.setInterval(() => {
       setElapsedSeconds((prev) => prev + 1);
       if (hasCountdownTimer) {
-        setRemainingSeconds((prev) => {
-          if (prev <= 1) {
-            window.clearInterval(timer);
-            if (pendingNextAnswersRef.current) {
-              void finalizeSession(pendingNextAnswersRef.current);
-            } else {
-              const currentDraft = buildCurrentDraftAnswer();
-              const merged = currentDraft ? [...collectedAnswers, currentDraft] : collectedAnswers;
-              void finalizeSession(merged);
-            }
-            return 0;
-          }
-          return prev - 1;
-        });
+        setRemainingSeconds((prev) => (prev <= 1 ? 0 : prev - 1));
       }
     }, 1000);
 
     return () => window.clearInterval(timer);
+  }, [examShortfallConfirmed, sessionInstances.length, submittingSession, hasCountdownTimer]);
+
+  // Auto-finalize when countdown reaches zero
+  useEffect(() => {
+    if (
+      !hasCountdownTimer ||
+      !examShortfallConfirmed ||
+      sessionInstances.length === 0 ||
+      submittingSession ||
+      remainingSeconds > 0 ||
+      finalizedRef.current
+    ) {
+      return;
+    }
+
+    if (pendingNextAnswersRef.current) {
+      void finalizeSessionRef.current(pendingNextAnswersRef.current);
+    } else {
+      const currentDraft = buildDraftRef.current();
+      const latestCollected = collectedAnswersRef.current;
+      const merged = currentDraft ? [...latestCollected, currentDraft] : latestCollected;
+      void finalizeSessionRef.current(merged);
+    }
   }, [
+    hasCountdownTimer,
     examShortfallConfirmed,
     sessionInstances.length,
     submittingSession,
-    hasCountdownTimer,
-    buildCurrentDraftAnswer,
-    collectedAnswers,
-    finalizeSession,
+    remainingSeconds,
   ]);
 
   const advanceToNextOrFinish = useCallback(
@@ -450,6 +475,7 @@ export const QuizSessionPage: React.FC<QuizSessionPageProps> = ({
       stopFeedbackSounds();
       pendingNextAnswersRef.current = null;
       submitLockRef.current = false;
+      standardLockRef.current = false;
       setFeedbackExiting(false);
       setFeedbackState(null);
 
@@ -518,9 +544,10 @@ export const QuizSessionPage: React.FC<QuizSessionPageProps> = ({
   ]);
 
   const handleStandardNextOrFinish = () => {
-    if (submittingSession) return;
+    if (submittingSession || standardLockRef.current || finalizedRef.current) return;
     const draft = buildCurrentDraftAnswer();
     if (!draft) return;
+    standardLockRef.current = true;
     advanceToNextOrFinish([...collectedAnswers, draft]);
   };
 

@@ -174,7 +174,7 @@ export async function updatePlayerName(
     }
     await updateDoc(doc(db, 'players', uid), updatePayload);
 
-    // Synchronize playerName across all active & legacy leaderboard docs owned by uid
+    // Synchronize playerName across all active & legacy leaderboard docs owned by uid atomically
     const modes: LeaderboardMode[] = [
       'overall',
       'ujian',
@@ -185,16 +185,21 @@ export async function updatePlayerName(
       'blind_syntax',
       'troubleshooting',
     ];
-    for (const mode of modes) {
-      const entryId = `${uid}_${mode}`;
-      const lbRef = doc(db, 'leaderboard', entryId);
-      const lbSnap = await getDoc(lbRef);
-      if (lbSnap.exists()) {
-        await updateDoc(lbRef, {
+    const lbRefs = modes.map((mode) => doc(db, 'leaderboard', `${uid}_${mode}`));
+    const lbSnaps = await Promise.all(lbRefs.map((ref) => getDoc(ref)));
+    const batch = writeBatch(db);
+    let hasLbUpdates = false;
+    lbSnaps.forEach((snap, idx) => {
+      if (snap.exists()) {
+        batch.update(lbRefs[idx], {
           playerName: name,
           updatedAt: serverTimestamp(),
         });
+        hasLbUpdates = true;
       }
+    });
+    if (hasLbUpdates) {
+      await batch.commit();
     }
   } catch (error) {
     handleFirestoreError(error, OperationType.UPDATE, path);
@@ -1447,60 +1452,64 @@ export async function deletePlayerAndAssociatedData(
   let deletedProgress = 0;
   let deletedLeaderboard = 0;
 
-  for (const uid of uids) {
-    try {
-      await deleteDoc(doc(db, 'players', uid));
-      deletedPlayers++;
-    } catch {
-      // ignore
-    }
+  const modes: LeaderboardMode[] = [
+    'overall',
+    'ujian',
+    'ujian_acak',
+    'troubleshoot',
+    'exam_challenge',
+    'guided_syntax',
+    'blind_syntax',
+    'troubleshooting',
+  ];
 
-    const modes = [
-      'overall',
-      'ujian',
-      'ujian_acak',
-      'troubleshoot',
-      'exam_challenge',
-      'guided_syntax',
-      'blind_syntax',
-      'troubleshooting',
-    ];
-    for (const mode of modes) {
-      const entryId = `${uid}_${mode}`;
-      try {
-        await deleteDoc(doc(db, 'leaderboard', entryId));
-        deletedLeaderboard++;
-      } catch {
-        // ignore
+  try {
+    for (const uid of uids) {
+      const playerRef = doc(db, 'players', uid);
+      const playerSnap = await getDoc(playerRef);
+      if (playerSnap.exists()) {
+        await deleteDoc(playerRef);
+        deletedPlayers++;
       }
-    }
 
-    try {
+      const lbRefs = modes.map((mode) => doc(db, 'leaderboard', `${uid}_${mode}`));
+      const lbSnaps = await Promise.all(lbRefs.map((ref) => getDoc(ref)));
+      const existingLbRefs = lbRefs.filter((_, idx) => lbSnaps[idx].exists());
+      if (existingLbRefs.length > 0) {
+        const lbBatch = writeBatch(db);
+        existingLbRefs.forEach((ref) => lbBatch.delete(ref));
+        await lbBatch.commit();
+        deletedLeaderboard += existingLbRefs.length;
+      }
+
       const progQuery = query(collection(db, 'playerProgress'), where('playerUid', '==', uid));
       const progSnap = await getDocs(progQuery);
-      for (const progDoc of progSnap.docs) {
-        await deleteDoc(progDoc.ref);
-        deletedProgress++;
+      if (!progSnap.empty) {
+        const progBatch = writeBatch(db);
+        progSnap.docs.forEach((progDoc) => progBatch.delete(progDoc.ref));
+        await progBatch.commit();
+        deletedProgress += progSnap.size;
       }
-    } catch {
-      // ignore
-    }
 
-    try {
       const sessQuery = query(collection(db, 'gameSessions'), where('playerUid', '==', uid));
       const sessSnap = await getDocs(sessQuery);
       for (const sessDoc of sessSnap.docs) {
         const answersSnap = await getDocs(collection(db, `gameSessions/${sessDoc.id}/answers`));
-        for (const ansDoc of answersSnap.docs) {
-          await deleteDoc(ansDoc.ref);
+        if (!answersSnap.empty) {
+          // Firestore batch limit is 500 writes
+          for (let i = 0; i < answersSnap.docs.length; i += 450) {
+            const ansBatch = writeBatch(db);
+            answersSnap.docs.slice(i, i + 450).forEach((ansDoc) => ansBatch.delete(ansDoc.ref));
+            await ansBatch.commit();
+          }
         }
         await deleteDoc(sessDoc.ref);
         deletedSessions++;
       }
-    } catch {
-      // ignore
     }
-  }
 
-  return { deletedPlayers, deletedSessions, deletedProgress, deletedLeaderboard };
+    return { deletedPlayers, deletedSessions, deletedProgress, deletedLeaderboard };
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, 'players');
+  }
 }

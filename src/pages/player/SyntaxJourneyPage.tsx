@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertCircle,
   ArrowLeft,
@@ -119,24 +119,33 @@ export const SyntaxJourneyPage: React.FC<SyntaxJourneyPageProps> = ({ onBackToMo
 
   const activeMilestone =
     activeMilestoneIndex >= 0 ? orderedMilestones[activeMilestoneIndex] : null;
+  const activeMilestoneRef = useRef(activeMilestone);
+  activeMilestoneRef.current = activeMilestone;
+  const lastInitializedKeyRef = useRef<string>('');
 
-  // Sync terminal input & variation whenever selected milestone changes
+  // Sync terminal input & variation ONLY when selected milestone key actually changes
   useEffect(() => {
-    if (!activeMilestone) {
+    const milestone = activeMilestoneRef.current;
+    if (!milestone || !activeMilestoneKey) {
+      lastInitializedKeyRef.current = '';
       setActiveVariation(null);
       setSyntaxInput('');
       setStageCompletedNow(false);
       return;
     }
+    if (lastInitializedKeyRef.current === activeMilestoneKey) {
+      return;
+    }
+    lastInitializedKeyRef.current = activeMilestoneKey;
     setActiveVariation({
-      question: activeMilestone.question,
-      promptUsed: activeMilestone.promptUsed,
-      variationKey: activeMilestone.variationKey,
+      question: milestone.question,
+      promptUsed: milestone.promptUsed,
+      variationKey: milestone.variationKey,
     });
     setSyntaxInput('');
     setStageCompletedNow(false);
     setCheckError(null);
-  }, [activeMilestoneKey, activeMilestone]);
+  }, [activeMilestoneKey]);
 
   const handleRandomizeVariation = () => {
     if (!player || !activeMilestone) return;
@@ -216,6 +225,12 @@ export const SyntaxJourneyPage: React.FC<SyntaxJourneyPageProps> = ({ onBackToMo
         updatedAt: new Date(),
       });
       setStageCompletedNow(true);
+    } catch (err) {
+      setCheckError(
+        err instanceof Error
+          ? err.message
+          : 'Gagal menyimpan progres latihan. Periksa koneksi internet Anda.',
+      );
     } finally {
       setSavingStage(false);
     }

@@ -37,6 +37,8 @@ export const ManageSyntaxJourneyPage: React.FC = () => {
   const [questionModalStageId, setQuestionModalStageId] = useState<string | null>(null);
   const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (syntaxPaths.length > 0 && !syntaxPaths.some((p) => p.id === selectedPathId)) {
@@ -91,16 +93,26 @@ export const ManageSyntaxJourneyPage: React.FC = () => {
 
   const handleSavePath = async (e: React.FormEvent) => {
     e.preventDefault();
-    const id = await saveSyntaxPath(editingPath?.id || null, {
-      title: pathTitle,
-      description: pathDesc,
-      categoryId: pathCatId,
-      active: pathActive,
-      chapters,
-    });
-    setSelectedPathId(id);
-    setShowPathForm(false);
-    setFeedback(editingPath ? 'Jalur milestone diperbarui.' : 'Jalur milestone baru dibuat.');
+    if (saving || !pathTitle.trim()) return;
+    setSaving(true);
+    setErrorMsg(null);
+    setFeedback(null);
+    try {
+      const id = await saveSyntaxPath(editingPath?.id || null, {
+        title: pathTitle,
+        description: pathDesc,
+        categoryId: pathCatId,
+        active: pathActive,
+        chapters,
+      });
+      setSelectedPathId(id);
+      setShowPathForm(false);
+      setFeedback(editingPath ? 'Jalur milestone diperbarui.' : 'Jalur milestone baru dibuat.');
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Gagal menyimpan jalur milestone.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const openNewStage = () => {
@@ -123,27 +135,74 @@ export const ManageSyntaxJourneyPage: React.FC = () => {
 
   const handleSaveStage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!currentPath) return;
-    await saveSyntaxStage(editingStage?.id || null, {
-      pathId: currentPath.id,
-      orderIndex: editingStage ? editingStage.orderIndex : stagesForPath.length + 1,
-      title: stageTitle,
-      description: stageDesc,
-      chapterId: stageChapterId,
-      active: stageActive,
-    });
-    setShowStageForm(false);
-    setFeedback(editingStage ? 'Milestone diperbarui.' : 'Milestone baru ditambahkan.');
+    if (!currentPath || saving || !stageTitle.trim()) return;
+    setSaving(true);
+    setErrorMsg(null);
+    setFeedback(null);
+    try {
+      await saveSyntaxStage(editingStage?.id || null, {
+        pathId: currentPath.id,
+        orderIndex: editingStage ? editingStage.orderIndex : stagesForPath.length + 1,
+        title: stageTitle,
+        description: stageDesc,
+        chapterId: stageChapterId,
+        active: stageActive,
+      });
+      setShowStageForm(false);
+      setFeedback(editingStage ? 'Milestone diperbarui.' : 'Milestone baru ditambahkan.');
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Gagal menyimpan milestone.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const moveStage = async (idx: number, dir: -1 | 1) => {
     const targetIdx = idx + dir;
-    if (targetIdx < 0 || targetIdx >= stagesForPath.length) return;
-    const reordered = [...stagesForPath];
-    const [item] = reordered.splice(idx, 1);
-    reordered.splice(targetIdx, 0, item);
-    await reorderSyntaxStages(reordered);
-    setFeedback('Urutan milestone diperbarui.');
+    if (saving || targetIdx < 0 || targetIdx >= stagesForPath.length) return;
+    setSaving(true);
+    setErrorMsg(null);
+    try {
+      const reordered = [...stagesForPath];
+      const [item] = reordered.splice(idx, 1);
+      reordered.splice(targetIdx, 0, item);
+      await reorderSyntaxStages(reordered);
+      setFeedback('Urutan milestone diperbarui.');
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Gagal mengubah urutan milestone.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeletePath = async (id: string) => {
+    if (saving) return;
+    setSaving(true);
+    setErrorMsg(null);
+    setFeedback(null);
+    try {
+      await deleteSyntaxPath(id);
+      setFeedback('Jalur milestone dihapus.');
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Gagal menghapus jalur milestone.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteStage = async (id: string) => {
+    if (saving) return;
+    setSaving(true);
+    setErrorMsg(null);
+    setFeedback(null);
+    try {
+      await deleteSyntaxStage(id);
+      setFeedback('Milestone dihapus.');
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Gagal menghapus milestone.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -166,6 +225,12 @@ export const ManageSyntaxJourneyPage: React.FC = () => {
           Buat Jalur Modul
         </button>
       </div>
+
+      {errorMsg && (
+        <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-xs text-red-800">
+          {errorMsg}
+        </div>
+      )}
 
       {feedback && (
         <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 text-xs text-blue-900">
@@ -285,9 +350,10 @@ export const ManageSyntaxJourneyPage: React.FC = () => {
             </button>
             <button
               type="submit"
-              className="px-4 py-2 text-xs font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700"
+              disabled={saving}
+              className="px-4 py-2 text-xs font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-60"
             >
-              Simpan Jalur
+              {saving ? 'Menyimpan...' : 'Simpan Jalur'}
             </button>
           </div>
         </form>
@@ -330,8 +396,9 @@ export const ManageSyntaxJourneyPage: React.FC = () => {
                 </button>
                 <button
                   type="button"
-                  onClick={() => void deleteSyntaxPath(p.id)}
-                  className="text-slate-500 hover:text-red-600"
+                  disabled={saving}
+                  onClick={() => void handleDeletePath(p.id)}
+                  className="text-slate-500 hover:text-red-600 disabled:opacity-40"
                   title="Hapus Jalur"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
@@ -419,9 +486,10 @@ export const ManageSyntaxJourneyPage: React.FC = () => {
                       </button>
                       <button
                         type="submit"
-                        className="px-3 py-1.5 text-xs font-semibold text-white bg-blue-600 rounded-lg"
+                        disabled={saving}
+                        className="px-3 py-1.5 text-xs font-semibold text-white bg-blue-600 rounded-lg disabled:opacity-60"
                       >
-                        Simpan Milestone
+                        {saving ? 'Menyimpan...' : 'Simpan Milestone'}
                       </button>
                     </div>
                   </div>
@@ -512,8 +580,9 @@ export const ManageSyntaxJourneyPage: React.FC = () => {
                             </button>
                             <button
                               type="button"
-                              onClick={() => void deleteSyntaxStage(st.id)}
-                              className="p-1.5 text-slate-500 hover:text-red-600"
+                              disabled={saving}
+                              onClick={() => void handleDeleteStage(st.id)}
+                              className="p-1.5 text-slate-500 hover:text-red-600 disabled:opacity-40"
                               title="Hapus Milestone"
                             >
                               <Trash2 className="w-4 h-4" />

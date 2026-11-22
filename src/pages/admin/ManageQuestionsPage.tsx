@@ -18,6 +18,8 @@ export const ManageQuestionsPage: React.FC = () => {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   const categoryMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -52,8 +54,31 @@ export const ManageQuestionsPage: React.FC = () => {
   }, [questions, search, filterCategory, filterType, filterStatus, sortBy]);
 
   const handleDelete = async (q: Question) => {
-    await deleteQuestion(q.id);
-    setFeedback(`Soal "${q.title}" berhasil dihapus.`);
+    if (busyId) return;
+    setBusyId(q.id);
+    setErrorMsg(null);
+    setFeedback(null);
+    try {
+      await deleteQuestion(q.id);
+      setFeedback(`Soal "${q.title}" berhasil dihapus.`);
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Gagal menghapus soal.');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleToggleActive = async (q: Question) => {
+    if (busyId) return;
+    setBusyId(q.id);
+    setErrorMsg(null);
+    try {
+      await toggleQuestionActive(q);
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Gagal mengubah status soal.');
+    } finally {
+      setBusyId(null);
+    }
   };
 
   return (
@@ -78,6 +103,12 @@ export const ManageQuestionsPage: React.FC = () => {
           Tambah Soal
         </button>
       </div>
+
+      {errorMsg && (
+        <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-xs text-red-800">
+          {errorMsg}
+        </div>
+      )}
 
       {feedback && (
         <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 text-xs text-blue-900">
@@ -226,8 +257,9 @@ export const ManageQuestionsPage: React.FC = () => {
                       <td className="py-3 px-4">
                         <button
                           type="button"
-                          onClick={() => void toggleQuestionActive(q)}
-                          className={`text-xs font-semibold ${
+                          disabled={busyId === q.id}
+                          onClick={() => void handleToggleActive(q)}
+                          className={`text-xs font-semibold disabled:opacity-50 ${
                             q.active ? 'text-emerald-700' : 'text-slate-400'
                           }`}
                         >
@@ -248,8 +280,9 @@ export const ManageQuestionsPage: React.FC = () => {
                         </button>
                         <button
                           type="button"
+                          disabled={busyId === q.id}
                           onClick={() => void handleDelete(q)}
-                          className="p-1.5 text-slate-600 hover:text-red-600 ml-1"
+                          className="p-1.5 text-slate-600 hover:text-red-600 ml-1 disabled:opacity-50"
                           title="Hapus Soal"
                         >
                           <Trash2 className="w-4 h-4" />

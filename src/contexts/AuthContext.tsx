@@ -132,26 +132,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setDataLoading(false);
       }
     };
+    const handleSubError = (err: unknown) => {
+      markLoaded();
+      console.error('Firestore subscription error:', err);
+    };
 
     const unsubCats = subscribeCategories((items) => {
       setCategories(items);
       markLoaded();
-    });
+    }, handleSubError);
     const unsubQuestions = subscribeQuestions((items) => {
       setQuestions(items);
       markLoaded();
-    });
+    }, handleSubError);
     const unsubPaths = subscribeSyntaxPaths((items) => {
       setSyntaxPaths(items);
       markLoaded();
-    });
+    }, handleSubError);
     const unsubStages = subscribeSyntaxStages((items) => {
       setSyntaxStages(items);
       markLoaded();
-    });
-    const unsubSettings = subscribeSettings((s) => {
-      setSettings(s);
-    });
+    }, handleSubError);
+    const unsubSettings = subscribeSettings(
+      (s) => {
+        setSettings(s);
+      },
+      (err) => console.error('Firestore settings error:', err),
+    );
 
     return () => {
       unsubCats();
