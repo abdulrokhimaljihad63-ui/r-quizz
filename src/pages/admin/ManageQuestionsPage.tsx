@@ -156,7 +156,7 @@ export const ManageQuestionsPage: React.FC = () => {
             </p>
             <p className="text-xs text-slate-500">
               {questions.length === 0
-                ? 'Klik tombol "Tambah Soal" untuk mulai mengisi bank soal UKK secara manual.'
+                ? 'Klik tombol "Tambah Soal" untuk mulai mengisi bank soal RQuizz secara manual.'
                 : 'Ubah kata kunci pencarian atau filter di atas.'}
             </p>
           </div>

@@ -19,14 +19,16 @@ import { QuizSessionPage } from './pages/player/QuizSessionPage';
 import { ResultsPage } from './pages/player/ResultsPage';
 import { SyntaxJourneyPage } from './pages/player/SyntaxJourneyPage';
 import { WelcomePage } from './pages/WelcomePage';
+import { Logo } from './components/Logo';
 import type { ActiveSessionResult, GameMode } from './types';
 import { parseAbsenNumber } from './utils/dynamicAnswer';
 
 function AppRouter() {
-  const { authReady, firebaseUser, player, isAdmin, logoutAdmin, updatePlayerAbsenNumber } = useAuth();
-  const [absenPromptInput, setAbsenPromptInput] = useState('');
-  const [absenPromptSaving, setAbsenPromptSaving] = useState(false);
-  const [absenPromptError, setAbsenPromptError] = useState<string | null>(null);
+  const { authReady, firebaseUser, player, isAdmin, logoutAdmin, logoutPlayer, registerStudent } = useAuth();
+  const [regName, setRegName] = useState(firebaseUser?.displayName || '');
+  const [regAbsen, setRegAbsen] = useState('');
+  const [regSubmitting, setRegSubmitting] = useState(false);
+  const [regError, setRegError] = useState<string | null>(null);
 
   const [showAdminLogin, setShowAdminLogin] = useState(false);
   const [adminTab, setAdminTab] = useState<AdminTab>('dashboard');
@@ -43,10 +45,10 @@ function AppRouter() {
 
   if (!authReady) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
-        <div className="text-center space-y-2">
-          <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-xs font-medium text-slate-500">Menghubungkan ke UKK Challenge...</p>
+      <div className="min-h-screen rquizz-cyber-bg flex items-center justify-center p-6">
+        <div className="text-center space-y-2.5">
+          <div className="w-8 h-8 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-xs font-semibold text-slate-200">Menghubungkan ke RQuizz...</p>
         </div>
       </div>
     );
@@ -80,71 +82,84 @@ function AppRouter() {
     return <AdminLoginPage onBack={() => setShowAdminLogin(false)} />;
   }
 
-  // Player Onboarding
-  if (!player) {
+  // Not logged in at all -> Welcome Page (Google Sign-In)
+  if (!firebaseUser) {
     return <WelcomePage onOpenAdminLogin={() => setShowAdminLogin(true)} />;
   }
 
-  // Legacy Player Gate: ensure existing players without absenNumber fill it before playing
-  if (parseAbsenNumber(player.absenNumber) === null) {
-    const handleCompleteAbsen = async (e: React.FormEvent) => {
+  // Logged in with Google, but no player profile yet -> Student Registration Form
+  if (!player) {
+    const handleRegister = async (e: React.FormEvent) => {
       e.preventDefault();
-      setAbsenPromptError(null);
-      const parsed = parseAbsenNumber(absenPromptInput);
-      if (parsed === null) {
-        setAbsenPromptError('Masukkan Nomor Absen berupa angka yang valid (1–999).');
+      setRegError(null);
+      const trimmed = regName.trim();
+      if (trimmed.length < 2) {
+        setRegError('Nama minimal 2 karakter.');
         return;
       }
-      setAbsenPromptSaving(true);
+      const parsed = parseAbsenNumber(regAbsen);
+      if (parsed === null) {
+        setRegError('Nomor absen harus berupa angka antara 1 sampai 999.');
+        return;
+      }
+      setRegSubmitting(true);
       try {
-        await updatePlayerAbsenNumber(parsed);
+        await registerStudent(trimmed, parsed);
       } catch (err) {
-        setAbsenPromptError(err instanceof Error ? err.message : 'Gagal menyimpan nomor absen.');
+        setRegError(err instanceof Error ? err.message : 'Gagal mendaftarkan profil.');
       } finally {
-        setAbsenPromptSaving(false);
+        setRegSubmitting(false);
       }
     };
 
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-        <div className="max-w-md w-full bg-white border border-slate-200 rounded-2xl p-6 sm:p-8 shadow-sm space-y-5">
-          <div>
-            <p className="text-xs font-medium text-blue-600">Lengkapi Identitas · {player.name}</p>
-            <h1 className="text-xl font-bold text-slate-900 mt-1">Masukkan Nomor Absen</h1>
-            <p className="text-sm text-slate-600 mt-1 leading-relaxed">
-              Nomor absen wajib diisi sebelum memulai permainan agar soal dinamis dan konfigurasi IP
-              Address menyesuaikan nomor absenmu.
-            </p>
+      <div className="min-h-screen rquizz-cyber-bg flex items-center justify-center p-6 text-slate-100">
+        <div className="max-w-md w-full mx-auto px-6 py-8 space-y-7 text-center">
+          <div className="flex flex-col items-center space-y-3">
+            <Logo size="lg" showText={false} />
+            <h1 className="text-2xl font-bold text-white tracking-tight">selamat datang di RQuizz</h1>
           </div>
-          <form onSubmit={handleCompleteAbsen} className="space-y-4">
-            <div>
-              <label htmlFor="legacy-absen" className="block text-sm font-medium text-slate-700 mb-1.5">
-                Nomor Absen
-              </label>
+
+          <form onSubmit={handleRegister} className="space-y-5 text-left">
+            <div className="space-y-2">
+              <label className="block text-base font-bold text-white">nama</label>
               <input
-                id="legacy-absen"
                 type="text"
-                inputMode="numeric"
-                value={absenPromptInput}
-                onChange={(e) => setAbsenPromptInput(e.target.value.replace(/[^\d]/g, '').slice(0, 3))}
-                placeholder="Contoh: 07 atau 15"
-                maxLength={3}
+                value={regName}
+                onChange={(e) => setRegName(e.target.value)}
+                placeholder="nama lengkap"
+                maxLength={60}
                 required
-                className="w-full px-3.5 py-2.5 text-sm font-mono border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
+                className="w-full px-4 py-3 text-base font-semibold text-white placeholder:text-slate-400 bg-slate-950/75 backdrop-blur-md border border-fuchsia-400/35 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-400/30 focus:border-cyan-400"
               />
             </div>
-            {absenPromptError && (
-              <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
-                {absenPromptError}
+            <div className="space-y-2">
+              <label className="block text-base font-bold text-white">no absen</label>
+              <input
+                type="text"
+                inputMode="numeric"
+                value={regAbsen}
+                onChange={(e) => setRegAbsen(e.target.value.replace(/[^\d]/g, '').slice(0, 3))}
+                placeholder="07"
+                maxLength={3}
+                required
+                className="w-full px-4 py-3 text-base font-mono font-bold text-white placeholder:text-slate-400 bg-slate-950/75 backdrop-blur-md border border-fuchsia-400/35 rounded-xl focus:outline-none focus:ring-2 focus:ring-cyan-400/30 focus:border-cyan-400"
+              />
+            </div>
+            {regError && (
+              <p className="text-xs text-red-200 bg-red-950/75 border border-red-400/40 rounded-lg px-3.5 py-2.5">
+                {regError}
               </p>
             )}
-            <button
-              type="submit"
-              disabled={absenPromptSaving}
-              className="w-full px-5 py-2.5 text-sm font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-60"
-            >
-              {absenPromptSaving ? 'Menyimpan...' : 'Simpan & Lanjutkan'}
-            </button>
+            <div className="pt-2">
+              <button
+                type="submit"
+                disabled={regSubmitting}
+                className="w-full py-3.5 text-sm font-bold text-slate-950 bg-emerald-400 rounded-xl hover:bg-emerald-300 transition-colors disabled:opacity-60 shadow-[0_0_20px_rgba(52,211,153,0.28)]"
+              >
+                {regSubmitting ? 'memproses...' : 'simpan'}
+              </button>
+            </div>
           </form>
         </div>
       </div>
@@ -175,9 +190,13 @@ function AppRouter() {
     setPlayerTab(tab);
   };
 
+  const isDashboardView =
+    !activePractice && !activeQuiz && !lastResult && playerTab === 'dashboard';
+
   return (
     <PlayerLayout
       activeTab={playerTab}
+      showOverallLeaderBar={isDashboardView}
       onNavigate={navigatePlayer}
       onStartQuickExam={() => startQuiz('ujian', 'all')}
       playerName={player.name}

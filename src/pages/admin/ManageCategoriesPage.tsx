@@ -59,8 +59,8 @@ export const ManageCategoriesPage: React.FC = () => {
       const added = await seedInitialCategories();
       setFeedback(
         added > 0
-          ? `${added} kategori awal UKK berhasil dimuat.`
-          : 'Semua kategori awal UKK sudah ada.',
+          ? `${added} kategori awal RQuizz berhasil dimuat.`
+          : 'Semua kategori awal RQuizz sudah ada.',
       );
     } finally {
       setSaving(false);
@@ -85,7 +85,7 @@ export const ManageCategoriesPage: React.FC = () => {
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Kelola Kategori Materi</h1>
           <p className="text-sm text-slate-600 mt-0.5">
-            Tambah, ubah, aktifkan/nonaktifkan kategori UKK secara dinamis.
+            Tambah, ubah, aktifkan/nonaktifkan kategori RQuizz secara dinamis.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">

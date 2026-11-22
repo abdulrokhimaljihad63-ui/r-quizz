@@ -47,7 +47,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ onNaviga
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Admin Dashboard</h1>
           <p className="text-sm text-slate-600 mt-0.5">
-            Ringkasan bank soal, partisipasi siswa, dan statistik sesi ujian UKK Challenge.
+            Ringkasan bank soal, partisipasi siswa, dan statistik sesi ujian RQuizz.
           </p>
         </div>
 

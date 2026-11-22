@@ -127,7 +127,7 @@ export const MODE_META: Record<
     label: 'Ujian',
     shortLabel: 'Ujian',
     description:
-      'Ujian sintaks berurutan sesuai modul UKK tanpa petunjuk; dinilai per soal saat menekan Submit Jawaban.',
+      'Ujian sintaks berurutan sesuai modul RQuizz tanpa petunjuk; dinilai per soal saat menekan Submit Jawaban.',
     accent: 'blue',
     isExam: true,
   },
@@ -198,4 +198,4 @@ export const LEADERBOARD_MODES: Array<{ id: ActiveLeaderboardMode; label: string
   { id: 'troubleshoot', label: 'Troubleshoot' },
 ];
 
-export const LOGO_URL = '/assets/aistudio/1795183337339_05b2b56c.jpg';
+export const LOGO_URL = '/assets/aistudio/Desain_tanpa_judul_20261122_141104_0000_fb4a92db.png';

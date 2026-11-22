@@ -1438,3 +1438,69 @@ export async function savePlayerPathProgress(
     handleFirestoreError(error, OperationType.WRITE, path);
   }
 }
+
+export async function deletePlayerAndAssociatedData(
+  uids: string[],
+): Promise<{ deletedPlayers: number; deletedSessions: number; deletedProgress: number; deletedLeaderboard: number }> {
+  let deletedPlayers = 0;
+  let deletedSessions = 0;
+  let deletedProgress = 0;
+  let deletedLeaderboard = 0;
+
+  for (const uid of uids) {
+    try {
+      await deleteDoc(doc(db, 'players', uid));
+      deletedPlayers++;
+    } catch {
+      // ignore
+    }
+
+    const modes = [
+      'overall',
+      'ujian',
+      'ujian_acak',
+      'troubleshoot',
+      'exam_challenge',
+      'guided_syntax',
+      'blind_syntax',
+      'troubleshooting',
+    ];
+    for (const mode of modes) {
+      const entryId = `${uid}_${mode}`;
+      try {
+        await deleteDoc(doc(db, 'leaderboard', entryId));
+        deletedLeaderboard++;
+      } catch {
+        // ignore
+      }
+    }
+
+    try {
+      const progQuery = query(collection(db, 'playerProgress'), where('playerUid', '==', uid));
+      const progSnap = await getDocs(progQuery);
+      for (const progDoc of progSnap.docs) {
+        await deleteDoc(progDoc.ref);
+        deletedProgress++;
+      }
+    } catch {
+      // ignore
+    }
+
+    try {
+      const sessQuery = query(collection(db, 'gameSessions'), where('playerUid', '==', uid));
+      const sessSnap = await getDocs(sessQuery);
+      for (const sessDoc of sessSnap.docs) {
+        const answersSnap = await getDocs(collection(db, `gameSessions/${sessDoc.id}/answers`));
+        for (const ansDoc of answersSnap.docs) {
+          await deleteDoc(ansDoc.ref);
+        }
+        await deleteDoc(sessDoc.ref);
+        deletedSessions++;
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  return { deletedPlayers, deletedSessions, deletedProgress, deletedLeaderboard };
+}

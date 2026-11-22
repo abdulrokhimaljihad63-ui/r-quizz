@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import {
   AlertTriangle,
   BookOpen,
@@ -43,6 +44,8 @@ const DASHBOARD_MODE_ORDER: ActiveGameMode[] = [
 export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onStartMode }) => {
   const { player, questions, syntaxPaths, syntaxStages, settings } = useAuth();
   const [selectedMode, setSelectedMode] = useState<ActiveGameMode | null>(null);
+  const [showRoomNotice, setShowRoomNotice] = useState(false);
+  const prefersReducedMotion = useReducedMotion();
 
   const activeQuestions = useMemo(() => questions.filter((q) => q.active), [questions]);
 
@@ -83,7 +86,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onStar
           badge: 'Latihan Bebas · Tanpa Nilai',
           availabilityText: `${orderedSyntaxCount} milestone berurutan`,
           timeText: null,
-          note: 'Urutan soal sama persis dengan modul UKK. Petunjuk dan koreksi warna aktif langsung saat mengetik.',
+          note: 'Urutan soal sama persis dengan modul RQuizz. Petunjuk dan koreksi warna aktif langsung saat mengetik.',
           canStart: isEnabled && orderedSyntaxCount > 0,
           isEnabled,
         });
@@ -95,7 +98,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onStar
           badge: 'Mode Ujian · Nilai Maks 100 · Akumulasi Leaderboard',
           availabilityText: `${orderedSyntaxCount} soal berurutan`,
           timeText: `${examMinutes} menit`,
-          note: 'Tanpa petunjuk dan tanpa warna koreksi saat mengetik. Penilaian dilakukan saat menekan Submit Jawaban.',
+          note: 'Tanpa petunjuk dan tanpa warna koreksi saat mengetik. Penilaian dilakukan saat menekan Cek Jawaban.',
           canStart: isEnabled && orderedSyntaxCount > 0,
           isEnabled,
         });
@@ -147,25 +150,80 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onStar
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [selectedMode]);
 
+  useEffect(() => {
+    if (!player?.uid) return;
+    const storageKey = `rquizz_room_notice_seen_${player.uid}`;
+    try {
+      if (window.localStorage.getItem(storageKey) === '1') {
+        return;
+      }
+    } catch {
+      return;
+    }
+
+    setShowRoomNotice(true);
+
+    const persistTimer = window.setTimeout(() => {
+      try {
+        window.localStorage.setItem(storageKey, '1');
+      } catch {
+        // Ignore storage errors
+      }
+    }, 300);
+
+    const hideTimer = window.setTimeout(() => {
+      setShowRoomNotice(false);
+    }, 4500);
+
+    return () => {
+      window.clearTimeout(persistTimer);
+      window.clearTimeout(hideTimer);
+    };
+  }, [player?.uid]);
+
   if (!player) return null;
 
   const activePopupInfo = selectedMode ? modeInfoMap.get(selectedMode) || null : null;
 
   const getModeIcon = (mode: ActiveGameMode) => {
     if (mode === 'ujian') return <ShieldCheck className="w-4 h-4 text-white shrink-0" />;
-    if (mode === 'practice_only') return <BookOpen className="w-4 h-4 text-yellow-600 shrink-0" />;
-    if (mode === 'ujian_acak') return <Shuffle className="w-4 h-4 text-blue-600 shrink-0" />;
-    return <Wrench className="w-4 h-4 text-blue-600 shrink-0" />;
+    if (mode === 'practice_only') return <BookOpen className="w-4 h-4 text-amber-300 shrink-0" />;
+    if (mode === 'ujian_acak') return <Shuffle className="w-4 h-4 text-sky-400 shrink-0" />;
+    return <Wrench className="w-4 h-4 text-sky-400 shrink-0" />;
   };
 
   return (
-    <div className="max-w-lg mx-auto space-y-6">
+    <div className="max-w-lg mx-auto space-y-6 pt-2">
+      {/* One-time Top Room Notice Popup */}
+      <AnimatePresence>
+        {showRoomNotice && (
+          <motion.div
+            role="status"
+            aria-live="polite"
+            initial={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: -40 }}
+            animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
+            exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: -40 }}
+            transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+            className="fixed top-4 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-2rem)] max-w-md pointer-events-none"
+          >
+            <div className="bg-[#0d071b]/95 backdrop-blur-xl border border-cyan-400/50 rounded-2xl px-5 py-3.5 shadow-[0_12px_36px_rgba(34,211,238,0.24)] text-center">
+              <p className="text-sm font-bold text-white leading-snug">
+                anda sedang berada di ruang{' '}
+                <span className="text-cyan-300">rquizz-ukk-tkj1-2026</span>
+              </p>
+              <p className="text-xs font-semibold text-slate-300 mt-1">
+                di buat oleh rokhim
+              </p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
       {/* Greeting + Smaller Mode Heading */}
       <section className="space-y-1.5">
-        <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight text-balance">
+        <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight text-balance">
           Selamat datang, {player.name}
         </h1>
-        <h2 className="text-sm sm:text-base font-medium text-slate-600">
+        <h2 className="text-sm sm:text-base font-medium text-slate-300">
           Pilih Mode Permainan
         </h2>
       </section>
@@ -180,18 +238,20 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onStar
           const isPractice = mode === 'practice_only';
 
           const cardClasses = isMainExam
-            ? 'bg-emerald-600 border-emerald-600 text-white hover:bg-emerald-700 hover:border-emerald-700 shadow-sm'
-            : 'bg-white border-slate-200 text-slate-900 hover:border-blue-300';
+            ? 'bg-emerald-600/90 backdrop-blur-md border-emerald-400/60 text-white hover:bg-emerald-500/95 hover:border-emerald-300 shadow-[0_0_24px_rgba(16,185,129,0.28)]'
+            : isPractice
+              ? 'bg-slate-950/75 backdrop-blur-md border-amber-400/35 text-white hover:border-amber-300/75 hover:bg-slate-900/85'
+              : 'bg-slate-950/75 backdrop-blur-md border-fuchsia-400/25 text-white hover:border-cyan-400/65 hover:bg-slate-900/85';
 
           const actionTextClasses = !info.isEnabled
             ? isMainExam
               ? 'text-emerald-100'
-              : 'text-slate-400'
+              : 'text-slate-500'
             : isMainExam
               ? 'text-white'
               : isPractice
-                ? 'text-yellow-600'
-                : 'text-blue-600';
+                ? 'text-amber-300'
+                : 'text-sky-400';
 
           return (
             <button
@@ -199,17 +259,17 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onStar
               type="button"
               disabled={!info.isEnabled}
               onClick={() => setSelectedMode(mode)}
-              className={`w-full text-left border rounded-xl px-4 py-3.5 flex items-center justify-between gap-4 transition-colors disabled:opacity-60 disabled:cursor-not-allowed group ${cardClasses}`}
+              className={`w-full text-left border rounded-xl px-4 py-3.5 flex items-center justify-between gap-4 transition-all disabled:opacity-60 disabled:cursor-not-allowed group ${cardClasses}`}
             >
               <span className="flex items-center gap-2.5 min-w-0">
                 {getModeIcon(mode)}
-                <span className="text-sm sm:text-base font-semibold leading-snug">
+                <span className="text-sm sm:text-base font-bold leading-snug">
                   {info.label}
                 </span>
               </span>
 
               <span
-                className={`text-xs sm:text-sm font-semibold whitespace-nowrap shrink-0 group-hover:underline ${actionTextClasses}`}
+                className={`text-xs sm:text-sm font-bold whitespace-nowrap shrink-0 group-hover:underline ${actionTextClasses}`}
               >
                 {info.isEnabled ? info.actionLabel : 'Dinonaktifkan'}
               </span>
@@ -223,18 +283,18 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onStar
         <button
           type="button"
           onClick={() => onNavigate('history')}
-          className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-100 transition-colors whitespace-nowrap shrink-0"
+          className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold text-slate-100 rquizz-panel rounded-xl hover:border-cyan-400/50 hover:bg-slate-900/85 transition-colors whitespace-nowrap shrink-0"
         >
-          <History className="w-4 h-4 text-slate-600" />
+          <History className="w-4 h-4 text-fuchsia-400" />
           Riwayat Ujian
         </button>
 
         <button
           type="button"
           onClick={() => onNavigate('leaderboard')}
-          className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-100 transition-colors whitespace-nowrap shrink-0"
+          className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold text-slate-100 rquizz-panel rounded-xl hover:border-cyan-400/50 hover:bg-slate-900/85 transition-colors whitespace-nowrap shrink-0"
         >
-          <Trophy className="w-4 h-4 text-blue-600" />
+          <Trophy className="w-4 h-4 text-amber-300" />
           Lihat Peringkat
         </button>
       </section>
@@ -246,24 +306,24 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onStar
           aria-modal="true"
           aria-labelledby="mode-instruction-title"
           onClick={() => setSelectedMode(null)}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 backdrop-blur-[2px] p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-4"
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-lg bg-white border border-slate-200 rounded-2xl p-6 shadow-xl space-y-5"
+            className="w-full max-w-lg bg-[#0d071b]/95 backdrop-blur-xl border border-fuchsia-400/35 rounded-2xl p-6 shadow-[0_0_40px_rgba(168,85,247,0.28)] space-y-5 text-slate-100"
           >
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p
-                  className={`text-xs font-semibold ${
-                    activePopupInfo.id === 'practice_only' ? 'text-yellow-600' : 'text-blue-600'
+                  className={`text-xs font-bold ${
+                    activePopupInfo.id === 'practice_only' ? 'text-amber-300' : 'text-cyan-300'
                   }`}
                 >
                   {activePopupInfo.badge}
                 </p>
                 <h3
                   id="mode-instruction-title"
-                  className="text-xl font-bold text-slate-900 mt-1"
+                  className="text-xl font-bold text-white mt-1"
                 >
                   {activePopupInfo.id === 'practice_only'
                     ? `Petunjuk Latihan — ${activePopupInfo.label}`
@@ -274,36 +334,36 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onStar
                 type="button"
                 aria-label="Tutup petunjuk"
                 onClick={() => setSelectedMode(null)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-2.5 text-xs sm:text-sm text-slate-700">
+            <div className="bg-black/50 border border-white/10 rounded-xl p-4 space-y-2.5 text-xs sm:text-sm text-slate-200">
               <div className="flex items-center justify-between gap-3">
-                <span className="text-slate-500">Ketersediaan Soal</span>
-                <span className="font-semibold text-slate-900 tabular-nums text-right">
+                <span className="text-slate-400">Ketersediaan Soal</span>
+                <span className="font-semibold text-white tabular-nums text-right">
                   {activePopupInfo.availabilityText}
                 </span>
               </div>
               {activePopupInfo.timeText && (
                 <div className="flex items-center justify-between gap-3">
-                  <span className="text-slate-500">Batas Waktu</span>
-                  <span className="font-semibold text-slate-900 tabular-nums">
+                  <span className="text-slate-400">Batas Waktu</span>
+                  <span className="font-semibold text-cyan-300 tabular-nums">
                     {activePopupInfo.timeText}
                   </span>
                 </div>
               )}
-              <div className="pt-2 border-t border-slate-200 text-xs text-slate-600 leading-relaxed space-y-1">
+              <div className="pt-2 border-t border-white/10 text-xs text-slate-300 leading-relaxed space-y-1">
                 <p>{MODE_META[activePopupInfo.id].description}</p>
                 <p>{activePopupInfo.note}</p>
               </div>
             </div>
 
             {!activePopupInfo.canStart && (
-              <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 flex items-start gap-2.5 text-xs text-amber-900">
-                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <div className="rounded-lg bg-amber-950/70 border border-amber-400/40 p-3 flex items-start gap-2.5 text-xs text-amber-200">
+                <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
                 <span>
                   Belum ada soal aktif yang tersedia untuk mode ini. Hubungi Admin/Guru untuk
                   menambahkan soal terlebih dahulu.
@@ -315,7 +375,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onStar
               <button
                 type="button"
                 onClick={() => setSelectedMode(null)}
-                className="px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors whitespace-nowrap shrink-0"
+                className="px-4 py-2 text-sm font-semibold text-slate-200 bg-white/10 rounded-lg hover:bg-white/15 transition-colors whitespace-nowrap shrink-0"
               >
                 Batal
               </button>
@@ -327,12 +387,12 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate, onStar
                   setSelectedMode(null);
                   onStartMode(modeToStart, 'all');
                 }}
-                className={`inline-flex items-center gap-2 px-5 py-2 text-sm font-semibold rounded-lg transition-colors whitespace-nowrap shrink-0 disabled:bg-slate-200 disabled:text-slate-500 disabled:cursor-not-allowed ${
+                className={`inline-flex items-center gap-2 px-5 py-2 text-sm font-bold rounded-lg transition-colors whitespace-nowrap shrink-0 disabled:bg-white/10 disabled:text-slate-500 disabled:cursor-not-allowed ${
                   activePopupInfo.id === 'practice_only'
-                    ? 'bg-yellow-400 hover:bg-yellow-500 text-slate-950'
+                    ? 'bg-amber-400 hover:bg-amber-300 text-slate-950'
                     : activePopupInfo.id === 'ujian'
-                      ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                      : 'bg-blue-600 hover:bg-blue-700 text-white'
+                      ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950'
+                      : 'bg-sky-400 hover:bg-sky-300 text-slate-950'
                 }`}
               >
                 <Play className="w-4 h-4" />

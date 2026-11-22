@@ -14,6 +14,7 @@ import {
   checkIsAdmin,
   createPlayerProfile,
   ensureAdminDoc,
+  getAllPlayers,
   getPlayerProfile,
   seedInitialCategories,
   subscribeCategories,
@@ -49,7 +50,8 @@ interface AuthContextValue {
   syntaxStages: SyntaxStage[];
   settings: AppSettings;
   dataLoading: boolean;
-  enterAsPlayer: (name: string, absenNumber: number) => Promise<void>;
+  loginStudentWithGoogle: () => Promise<void>;
+  registerStudent: (name: string, absenNumber: number) => Promise<void>;
   renamePlayer: (name: string, absenNumber?: number) => Promise<void>;
   updatePlayerAbsenNumber: (absenNumber: number) => Promise<void>;
   savePreferences: (prefs: PlayerPreferences) => Promise<void>;
@@ -90,29 +92,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (adminStatus && user.email) {
       try {
         await ensureAdminDoc(user.uid, user.email);
-        // Ensure initial 9 UKK categories exist when admin first logs in (questions remain empty!)
         await seedInitialCategories();
       } catch {
         // Non-fatal if rules deny when unverified
       }
-    }
-
-    if (user.isAnonymous) {
+      setPlayer(null);
+    } else {
       const existingPlayer = await getPlayerProfile(user.uid);
       setPlayer(existingPlayer);
-      if (existingPlayer) {
-        const recoveryCode = getOrCreateLocalRecoveryCode(existingPlayer.uid);
-        saveLocalPlayerSnapshot({
-          uid: existingPlayer.uid,
-          playerId: existingPlayer.playerId,
-          name: existingPlayer.name,
-          absenNumber: existingPlayer.absenNumber,
-          recoveryCode,
-          savedAt: new Date().toISOString(),
-        });
-      }
-    } else {
-      setPlayer(null);
     }
   }, []);
 
@@ -175,61 +162,59 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, [authReady, firebaseUser]);
 
-  const enterAsPlayer = useCallback(async (rawName: string, rawAbsen: number) => {
+  const loginStudentWithGoogle = useCallback(async () => {
     setAuthError(null);
-    const trimmed = rawName.trim();
-    if (trimmed.length < 2) {
-      throw new Error('Nama minimal 2 karakter.');
-    }
-    const cleanAbsen = parseAbsenNumber(rawAbsen);
-    if (cleanAbsen === null) {
-      throw new Error('Nomor absen wajib berupa angka antara 1 sampai 999.');
-    }
-
     try {
-      let currentUser = auth.currentUser;
-      if (!currentUser || !currentUser.isAnonymous) {
-        if (currentUser && !currentUser.isAnonymous) {
-          await signOut(auth);
-        }
-        const cred = await signInAnonymously(auth);
-        currentUser = cred.user;
+      const provider = new GoogleAuthProvider();
+      const cred = await signInWithPopup(auth, provider);
+      const adminOk = await checkIsAdmin(cred.user.uid, cred.user.email, cred.user.emailVerified);
+      if (adminOk) {
+        await signOut(auth);
+        throw new Error('Akun admin tidak dapat masuk melalui portal siswa.');
       }
-
-      let profile = await getPlayerProfile(currentUser.uid);
-      if (!profile) {
-        profile = await createPlayerProfile(currentUser.uid, trimmed, cleanAbsen);
-      } else if (profile.name !== trimmed || profile.absenNumber !== cleanAbsen) {
-        await updatePlayerName(currentUser.uid, trimmed, cleanAbsen);
-        profile = await getPlayerProfile(currentUser.uid);
-      }
-
-      if (profile) {
-        const recoveryCode = getOrCreateLocalRecoveryCode(profile.uid);
-        saveLocalPlayerSnapshot({
-          uid: profile.uid,
-          playerId: profile.playerId,
-          name: profile.name,
-          absenNumber: profile.absenNumber,
-          recoveryCode,
-          savedAt: new Date().toISOString(),
-        });
-      }
-
-      setPlayer(profile);
+      const existingPlayer = await getPlayerProfile(cred.user.uid);
+      setPlayer(existingPlayer);
     } catch (err: unknown) {
-      const code = (err as { code?: string })?.code;
-      if (code === 'auth/operation-not-allowed' || code === 'auth/admin-restricted-operation') {
-        const msg =
-          'Anonymous Authentication belum diaktifkan di Firebase Console. Silakan aktifkan Sign-in method: Anonymous pada menu Authentication Firebase Console.';
-        setAuthError(msg);
-        throw new Error(msg);
-      }
-      const message = err instanceof Error ? err.message : 'Gagal masuk sebagai pemain.';
+      const message = err instanceof Error ? err.message : 'Gagal masuk dengan Google.';
       setAuthError(message);
       throw err;
     }
   }, []);
+
+  const registerStudent = useCallback(
+    async (rawName: string, rawAbsen: number) => {
+      setAuthError(null);
+      if (!firebaseUser) {
+        throw new Error('Belum terautentikasi dengan Google.');
+      }
+      const trimmed = rawName.trim();
+      if (trimmed.length < 2) {
+        throw new Error('Nama minimal 2 karakter.');
+      }
+      const cleanAbsen = parseAbsenNumber(rawAbsen);
+      if (cleanAbsen === null) {
+        throw new Error('Nomor absen wajib berupa angka antara 1 sampai 999.');
+      }
+
+      try {
+        const all = await getAllPlayers();
+        const conflict = all.find((p: Player) => p.absenNumber === cleanAbsen && p.uid !== firebaseUser.uid);
+        if (conflict) {
+          throw new Error(
+            `Nomor absen ${cleanAbsen} sudah digunakan oleh siswa lain (${conflict.name}).`,
+          );
+        }
+
+        const profile = await createPlayerProfile(firebaseUser.uid, trimmed, cleanAbsen);
+        setPlayer(profile);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Gagal mendaftarkan profil siswa.';
+        setAuthError(message);
+        throw err;
+      }
+    },
+    [firebaseUser],
+  );
 
   const renamePlayer = useCallback(
     async (rawName: string, rawAbsen?: number) => {
@@ -247,21 +232,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           throw new Error('Nomor absen wajib berupa angka antara 1 sampai 999.');
         }
         cleanAbsen = parsed;
+        const all = await getAllPlayers();
+        const conflict = all.find((p: Player) => p.absenNumber === cleanAbsen && p.uid !== firebaseUser.uid);
+        if (conflict) {
+          throw new Error(
+            `Nomor absen ${cleanAbsen} sudah digunakan oleh siswa lain (${conflict.name}).`,
+          );
+        }
       }
       await updatePlayerName(firebaseUser.uid, trimmed, cleanAbsen);
       const updated = await getPlayerProfile(firebaseUser.uid);
       setPlayer(updated);
-      if (updated) {
-        const recoveryCode = getOrCreateLocalRecoveryCode(updated.uid);
-        saveLocalPlayerSnapshot({
-          uid: updated.uid,
-          playerId: updated.playerId,
-          name: updated.name,
-          absenNumber: updated.absenNumber,
-          recoveryCode,
-          savedAt: new Date().toISOString(),
-        });
-      }
     },
     [firebaseUser, player],
   );
@@ -401,7 +382,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         syntaxStages,
         settings,
         dataLoading,
-        enterAsPlayer,
+        loginStudentWithGoogle,
+        registerStudent,
         renamePlayer,
         updatePlayerAbsenNumber,
         savePreferences,

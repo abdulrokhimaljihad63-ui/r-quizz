@@ -261,13 +261,13 @@ export const SyntaxTerminal: React.FC<SyntaxTerminalProps> = ({
   return (
     <div
       onClick={() => textareaRef.current?.focus()}
-      className="rounded-xl bg-slate-950 border border-slate-800 shadow-sm overflow-hidden cursor-text"
+      className="rounded-xl bg-slate-950/90 backdrop-blur-md border border-fuchsia-400/30 shadow-[0_0_24px_rgba(168,85,247,0.12)] overflow-hidden cursor-text"
     >
       {/* Terminal Header */}
-      <div className="flex items-center justify-between px-3.5 py-2 bg-slate-900 border-b border-slate-800 text-xs">
+      <div className="flex items-center justify-between px-3.5 py-2 bg-black/70 border-b border-white/10 text-xs">
         <div className="flex items-center gap-2 text-slate-300 font-mono">
-          <Terminal className="w-3.5 h-3.5 text-blue-400 shrink-0" />
-          <span>root@ukk-lab:~#</span>
+          <Terminal className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+          <span>root@rquizz-lab:~#</span>
         </div>
         {!blindExamTyping && (
           <div className="flex items-center gap-2">

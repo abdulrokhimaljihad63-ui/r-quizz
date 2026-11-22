@@ -483,7 +483,6 @@ export const QuizSessionPage: React.FC<QuizSessionPageProps> = ({
     }
 
     if (isCorrect) {
-      // Unlock audio synchronously on click, then trigger at 1.8s when Success.svg reaches the checkmark draw phase
       unlockSuccessSound(soundOn);
       soundDelayTimerRef.current = window.setTimeout(() => {
         soundDelayTimerRef.current = null;
@@ -527,15 +526,15 @@ export const QuizSessionPage: React.FC<QuizSessionPageProps> = ({
 
   if (!player) return null;
 
-  // Empty state when no active questions exist (never fabricate fake questions!)
+  // Empty state when no active questions exist
   if (sessionInstances.length === 0) {
     return (
-      <div className="max-w-2xl mx-auto bg-white border border-slate-200 rounded-2xl p-8 text-center space-y-4">
-        <AlertTriangle className="w-10 h-10 text-amber-500 mx-auto" />
-        <h1 className="text-xl font-bold text-slate-900">
+      <div className="max-w-2xl mx-auto rquizz-panel rounded-2xl p-8 text-center space-y-4">
+        <AlertTriangle className="w-10 h-10 text-amber-400 mx-auto" />
+        <h1 className="text-xl font-bold text-white">
           Soal Untuk {MODE_META[mode].label} Belum Tersedia
         </h1>
-        <p className="text-sm text-slate-600 leading-relaxed">
+        <p className="text-sm text-slate-300 leading-relaxed">
           {isTroubleshootMode
             ? 'Belum ada soal Troubleshooting aktif di bank soal. Hubungi Admin/Guru untuk menambahkan soal Troubleshooting terlebih dahulu.'
             : isOrderedUjian
@@ -545,7 +544,7 @@ export const QuizSessionPage: React.FC<QuizSessionPageProps> = ({
         <button
           type="button"
           onClick={onExit}
-          className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
+          className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-bold text-slate-950 bg-cyan-400 rounded-lg hover:bg-cyan-300 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
           Kembali ke Beranda
@@ -554,27 +553,27 @@ export const QuizSessionPage: React.FC<QuizSessionPageProps> = ({
     );
   }
 
-  // Random exam shortfall confirmation notice (never duplicates questions!)
+  // Random exam shortfall confirmation notice
   if (isRandomExam && !examShortfallConfirmed && selection?.kind === 'ujian_acak') {
     const examData = selection.examData;
     const detail = examData.compositionDetail;
     return (
-      <div className="max-w-2xl mx-auto bg-white border border-slate-200 rounded-2xl p-6 sm:p-8 space-y-5">
+      <div className="max-w-2xl mx-auto rquizz-panel rounded-2xl p-6 sm:p-8 space-y-5 text-slate-100">
         <div className="flex items-start gap-3">
-          <Info className="w-6 h-6 text-blue-600 shrink-0 mt-0.5" />
+          <Info className="w-6 h-6 text-cyan-400 shrink-0 mt-0.5" />
           <div>
-            <h1 className="text-xl font-bold text-slate-900">Pemberitahuan Jumlah Soal Ujian</h1>
-            <p className="text-sm text-slate-600 mt-1 leading-relaxed">
-              Target <span className="font-semibold">{MODE_META[mode].label}</span> adalah{' '}
-              <span className="font-semibold">{examData.requestedTotal}</span> soal, namun bank soal
+            <h1 className="text-xl font-bold text-white">Pemberitahuan Jumlah Soal Ujian</h1>
+            <p className="text-sm text-slate-300 mt-1 leading-relaxed">
+              Target <span className="font-semibold text-white">{MODE_META[mode].label}</span> adalah{' '}
+              <span className="font-semibold text-white">{examData.requestedTotal}</span> soal, namun bank soal
               aktif saat ini tersedia{' '}
-              <span className="font-semibold text-blue-700">{examData.availableTotal}</span> soal
+              <span className="font-semibold text-cyan-300">{examData.availableTotal}</span> soal
               (sistem tidak menggandakan soal yang sama).
             </p>
           </div>
         </div>
 
-        <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-2 text-xs text-slate-700">
+        <div className="bg-black/50 border border-white/10 rounded-xl p-4 space-y-2 text-xs text-slate-200">
           <div className="flex justify-between">
             <span>Sintaks Berpetunjuk</span>
             <span className="font-mono tabular-nums">
@@ -599,14 +598,14 @@ export const QuizSessionPage: React.FC<QuizSessionPageProps> = ({
           <button
             type="button"
             onClick={onExit}
-            className="px-4 py-2.5 text-sm font-medium text-slate-700 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors"
+            className="px-4 py-2.5 text-sm font-semibold text-slate-200 bg-white/10 rounded-lg hover:bg-white/15 transition-colors"
           >
             Kembali
           </button>
           <button
             type="button"
             onClick={() => setExamShortfallConfirmed(true)}
-            className="px-5 py-2.5 text-sm font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
+            className="px-5 py-2.5 text-sm font-bold text-slate-950 bg-emerald-400 rounded-lg hover:bg-emerald-300 transition-colors"
           >
             Mulai Dengan {examData.availableTotal} Soal
           </button>
@@ -625,19 +624,19 @@ export const QuizSessionPage: React.FC<QuizSessionPageProps> = ({
 
   return (
     <div className="max-w-4xl mx-auto space-y-4">
-      {/* Top Session Header (unboxed) */}
-      <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-200">
+      {/* Top Session Header */}
+      <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-white/10">
         <div className="space-y-1.5">
-          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
-            <span className="font-semibold text-slate-900">{MODE_META[mode].label}</span>
+          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-300">
+            <span className="font-bold text-white">{MODE_META[mode].label}</span>
             <span aria-hidden="true">·</span>
             <span className="tabular-nums">
               Soal {currentIndex + 1} dari {sessionInstances.length}
             </span>
           </div>
-          <div className="w-48 sm:w-64 h-1.5 bg-slate-200 rounded-full overflow-hidden">
+          <div className="w-48 sm:w-64 h-1.5 bg-white/15 rounded-full overflow-hidden">
             <div
-              className="h-full bg-emerald-600 transition-all duration-200"
+              className="h-full bg-gradient-to-r from-cyan-400 to-emerald-400 transition-all duration-200"
               style={{ width: `${progressPercent}%` }}
             />
           </div>
@@ -645,11 +644,11 @@ export const QuizSessionPage: React.FC<QuizSessionPageProps> = ({
 
         <div className="flex items-center gap-3">
           {hasCountdownTimer && (
-            <div className="flex items-center gap-1.5 text-sm font-mono tabular-nums text-slate-700">
+            <div className="flex items-center gap-1.5 text-sm font-mono tabular-nums text-cyan-300">
               <Clock
-                className={`w-4 h-4 ${remainingSeconds <= 60 ? 'text-red-600' : 'text-slate-600'}`}
+                className={`w-4 h-4 ${remainingSeconds <= 60 ? 'text-rose-400' : 'text-cyan-400'}`}
               />
-              <span className={remainingSeconds <= 60 ? 'text-red-600 font-semibold' : ''}>
+              <span className={remainingSeconds <= 60 ? 'text-rose-400 font-bold' : 'font-semibold'}>
                 {formatTimer(remainingSeconds)}
               </span>
             </div>
@@ -657,19 +656,19 @@ export const QuizSessionPage: React.FC<QuizSessionPageProps> = ({
           <button
             type="button"
             onClick={onExit}
-            className="px-3 py-1.5 text-xs font-medium text-slate-600 hover:text-slate-900 border border-slate-300 bg-white rounded-lg hover:bg-slate-50 transition-colors whitespace-nowrap shrink-0"
+            className="px-3 py-1.5 text-xs font-semibold text-slate-200 hover:text-white border border-white/20 bg-slate-950/75 rounded-lg hover:bg-slate-900 transition-colors whitespace-nowrap shrink-0"
           >
             Keluar
           </button>
         </div>
       </div>
 
-      {/* Question Competency & Prompt (unboxed) */}
-      <div className="space-y-1.5">
-        <p className="text-xs sm:text-sm font-medium text-slate-500">
+      {/* Question Competency & Prompt inside semi-transparent cyber panel */}
+      <div className="rquizz-panel rounded-xl p-4 sm:p-5 space-y-1.5">
+        <p className="text-xs sm:text-sm font-medium text-slate-400">
           {currentInstance.milestoneTitle || currentQuestion.title}
         </p>
-        <h1 className="text-lg sm:text-xl font-semibold text-slate-950 leading-snug whitespace-pre-line">
+        <h1 className="text-lg sm:text-xl font-bold text-white leading-snug whitespace-pre-line">
           {currentInstance.promptUsed}
         </h1>
       </div>
@@ -701,14 +700,14 @@ export const QuizSessionPage: React.FC<QuizSessionPageProps> = ({
           hint={!isBlindOrUjian ? currentQuestion.hint : undefined}
         />
       ) : (
-        <div className="grid grid-cols-1 gap-2">
+        <div className="grid grid-cols-1 gap-2.5">
           {currentQuestion.options.map((opt, idx) => {
             const letter = ['A', 'B', 'C', 'D'][idx] || String(idx + 1);
             const isSelected = selectedOption === idx;
 
             const cardStyle = isSelected
-              ? 'border-emerald-600 bg-emerald-50 text-emerald-950 ring-1 ring-emerald-600'
-              : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50 text-slate-800';
+              ? 'border-emerald-400 bg-emerald-500/20 text-white ring-1 ring-emerald-400 backdrop-blur-md'
+              : 'border-white/15 bg-slate-950/75 backdrop-blur-md hover:border-cyan-400/50 hover:bg-slate-900/85 text-slate-100';
 
             return (
               <button
@@ -716,12 +715,16 @@ export const QuizSessionPage: React.FC<QuizSessionPageProps> = ({
                 type="button"
                 disabled={submittingSession || feedbackState !== null}
                 onClick={() => setSelectedOption(idx)}
-                className={`w-full text-left px-4 py-2.5 rounded-xl border transition-colors flex items-start gap-3 ${cardStyle}`}
+                className={`w-full text-left px-4 py-3 rounded-xl border transition-colors flex items-start gap-3 ${cardStyle}`}
               >
-                <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-700 shrink-0 mt-0.5">
+                <span
+                  className={`font-mono text-xs font-bold px-2 py-0.5 rounded shrink-0 mt-0.5 ${
+                    isSelected ? 'bg-emerald-400 text-slate-950' : 'bg-white/10 text-cyan-300'
+                  }`}
+                >
                   {letter}
                 </span>
-                <span className="text-sm leading-snug flex-1">{opt}</span>
+                <span className="text-sm font-medium leading-snug flex-1">{opt}</span>
               </button>
             );
           })}
@@ -729,7 +732,7 @@ export const QuizSessionPage: React.FC<QuizSessionPageProps> = ({
       )}
 
       {saveError && (
-        <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-xs text-red-700">
+        <div className="rounded-lg bg-red-950/75 border border-red-400/40 p-3 text-xs text-red-200">
           {saveError}
         </div>
       )}
@@ -741,7 +744,7 @@ export const QuizSessionPage: React.FC<QuizSessionPageProps> = ({
             type="button"
             disabled={submittingSession || feedbackState !== null}
             onClick={handleUjianSubmit}
-            className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-60 whitespace-nowrap shrink-0"
+            className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-bold text-slate-950 bg-emerald-400 rounded-lg hover:bg-emerald-300 transition-colors disabled:opacity-60 whitespace-nowrap shrink-0 shadow-[0_0_20px_rgba(52,211,153,0.28)]"
           >
             <Check className="w-4 h-4" />
             {submittingSession ? 'Menyimpan...' : 'Cek Jawaban'}
@@ -751,7 +754,7 @@ export const QuizSessionPage: React.FC<QuizSessionPageProps> = ({
             type="button"
             disabled={submittingSession}
             onClick={handleStandardNextOrFinish}
-            className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-60 whitespace-nowrap shrink-0"
+            className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-bold text-slate-950 bg-emerald-400 rounded-lg hover:bg-emerald-300 transition-colors disabled:opacity-60 whitespace-nowrap shrink-0 shadow-[0_0_20px_rgba(52,211,153,0.28)]"
           >
             {submittingSession
               ? 'Menyimpan...'

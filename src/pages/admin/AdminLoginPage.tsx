@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { ArrowLeft, Lock, ShieldCheck } from 'lucide-react';
-import { Footer } from '../../components/Footer';
 import { Logo } from '../../components/Logo';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -45,14 +44,14 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({ onBack }) => {
   const errorText = localError || authError;
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900">
-      <header className="bg-white border-b border-slate-200">
+    <div className="min-h-screen flex flex-col rquizz-cyber-bg text-slate-100">
+      <header className="bg-black/80 backdrop-blur-md">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <Logo size="sm" showText />
           <button
             type="button"
             onClick={onBack}
-            className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-600 hover:text-slate-900"
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-300 hover:text-white transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
             Kembali ke Halaman Pemain
@@ -61,14 +60,14 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({ onBack }) => {
       </header>
 
       <main className="flex-1 flex items-center justify-center px-4 py-12">
-        <div className="max-w-md w-full bg-white border border-slate-200 rounded-2xl p-6 sm:p-8 shadow-sm space-y-6">
+        <div className="max-w-md w-full rquizz-panel rounded-2xl p-6 sm:p-8 shadow-xl space-y-6">
           <div className="space-y-1.5">
-            <div className="inline-flex items-center gap-2 text-xs font-semibold text-blue-600">
+            <div className="inline-flex items-center gap-2 text-xs font-semibold text-cyan-300">
               <ShieldCheck className="w-4 h-4" />
               Akses Terbatas Pengelola
             </div>
-            <h1 className="text-2xl font-bold text-slate-900">Login Admin UKK Challenge</h1>
-            <p className="text-xs text-slate-500 leading-relaxed">
+            <h1 className="text-2xl font-bold text-white">Login Admin RQuizz</h1>
+            <p className="text-xs text-slate-300 leading-relaxed">
               Masuk menggunakan akun admin terdaftar di Firebase Authentication untuk mengelola bank
               soal, kategori, Syntax Journey, dan pengaturan ujian.
             </p>
@@ -76,7 +75,7 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({ onBack }) => {
 
           <form onSubmit={handleEmailLogin} className="space-y-4">
             <div>
-              <label htmlFor="admin-email" className="block text-xs font-semibold text-slate-700 mb-1.5">
+              <label htmlFor="admin-email" className="block text-xs font-semibold text-slate-200 mb-1.5">
                 Email Admin
               </label>
               <input
@@ -86,12 +85,12 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({ onBack }) => {
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 placeholder="admin@sekolah.sch.id"
-                className="w-full px-3.5 py-2.5 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
+                className="w-full px-3.5 py-2.5 text-sm text-white placeholder:text-slate-400 bg-black/50 border border-white/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-400/30 focus:border-cyan-400"
               />
             </div>
 
             <div>
-              <label htmlFor="admin-password" className="block text-xs font-semibold text-slate-700 mb-1.5">
+              <label htmlFor="admin-password" className="block text-xs font-semibold text-slate-200 mb-1.5">
                 Password
               </label>
               <input
@@ -101,12 +100,12 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({ onBack }) => {
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 placeholder="••••••••"
-                className="w-full px-3.5 py-2.5 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
+                className="w-full px-3.5 py-2.5 text-sm text-white placeholder:text-slate-400 bg-black/50 border border-white/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-400/30 focus:border-cyan-400"
               />
             </div>
 
             {errorText && (
-              <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-xs text-red-700 leading-relaxed">
+              <div className="rounded-lg bg-red-950/75 border border-red-400/40 p-3 text-xs text-red-200 leading-relaxed">
                 {errorText}
               </div>
             )}
@@ -114,7 +113,7 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({ onBack }) => {
             <button
               type="submit"
               disabled={loading}
-              className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-60"
+              className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-bold text-slate-950 bg-cyan-400 rounded-lg hover:bg-cyan-300 transition-colors disabled:opacity-60"
             >
               <Lock className="w-4 h-4" />
               {loading ? 'Memverifikasi...' : 'Masuk dengan Email & Password'}
@@ -122,28 +121,26 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({ onBack }) => {
           </form>
 
           <div className="relative flex items-center py-1">
-            <div className="flex-grow border-t border-slate-200" />
+            <div className="flex-grow border-t border-white/15" />
             <span className="shrink mx-3 text-xs text-slate-400">atau</span>
-            <div className="flex-grow border-t border-slate-200" />
+            <div className="flex-grow border-t border-white/15" />
           </div>
 
           <button
             type="button"
             disabled={loading}
             onClick={() => void handleGoogleLogin()}
-            className="w-full px-4 py-2.5 text-sm font-semibold text-slate-700 bg-slate-100 border border-slate-200 rounded-lg hover:bg-slate-200 transition-colors disabled:opacity-60"
+            className="w-full px-4 py-2.5 text-sm font-semibold text-slate-100 bg-white/10 border border-white/20 rounded-lg hover:bg-white/15 transition-colors disabled:opacity-60"
           >
             Masuk dengan Google Admin Terverifikasi
           </button>
 
-          <p className="text-[11px] text-slate-500 leading-relaxed">
+          <p className="text-[11px] text-slate-400 leading-relaxed">
             Tidak ada pendaftaran admin publik. Akun admin harus dibuat secara pribadi oleh
             pengelola melalui Firebase Console dan didaftarkan di koleksi <code>admins</code>.
           </p>
         </div>
       </main>
-
-      <Footer />
     </div>
   );
 };

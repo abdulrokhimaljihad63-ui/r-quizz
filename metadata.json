@@ -1,6 +1,6 @@
 {
-  "name": "UKK Challenge",
-  "description": "Platform latihan interaktif SMK untuk persiapan Uji Kompetensi Keahlian (UKK) Administrasi Sistem Jaringan: MikroTik, Debian/Linux, MariaDB, Apache, PHP, Moodle, Backup, Upgrade, dan Troubleshooting.",
+  "name": "RQuizz",
+  "description": "Platform kuis dan latihan interaktif RQuizz.",
   "requestFramePermissions": [],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"

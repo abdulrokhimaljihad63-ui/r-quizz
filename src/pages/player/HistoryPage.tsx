@@ -48,17 +48,17 @@ export const HistoryPage: React.FC = () => {
 
   return (
     <div className="space-y-5">
-      <h1 className="text-2xl font-bold text-slate-900">Riwayat Ujian</h1>
+      <h1 className="text-2xl font-bold text-white">Riwayat Ujian</h1>
 
       {loading ? (
-        <div className="bg-white border border-slate-200 rounded-2xl p-8 text-center text-sm text-slate-500">
+        <div className="rquizz-panel rounded-2xl p-8 text-center text-sm text-slate-300">
           Memuat riwayat ujian...
         </div>
       ) : sessions.length === 0 ? (
-        <div className="bg-white border border-slate-200 rounded-2xl p-10 text-center space-y-2">
-          <History className="w-8 h-8 text-slate-300 mx-auto" />
-          <p className="text-sm font-semibold text-slate-700">Belum Ada Riwayat Ujian</p>
-          <p className="text-xs text-slate-500">
+        <div className="rquizz-panel rounded-2xl p-10 text-center space-y-2">
+          <History className="w-8 h-8 text-fuchsia-400/70 mx-auto" />
+          <p className="text-sm font-bold text-white">Belum Ada Riwayat Ujian</p>
+          <p className="text-xs text-slate-300">
             Selesaikan satu sesi Ujian, Ujian Latihan Soal Acak, atau Troubleshoot untuk melihat
             riwayatnya di sini.
           </p>
@@ -74,16 +74,16 @@ export const HistoryPage: React.FC = () => {
             return (
               <div
                 key={sess.id}
-                className="bg-white border border-slate-200 rounded-xl overflow-hidden"
+                className="rquizz-panel rounded-xl overflow-hidden"
               >
                 <button
                   type="button"
                   onClick={() => void toggleExpand(sess.id)}
-                  className="w-full p-4 sm:p-5 text-left flex flex-wrap items-center justify-between gap-4 hover:bg-slate-50/70 transition-colors"
+                  className="w-full p-4 sm:p-5 text-left flex flex-wrap items-center justify-between gap-4 hover:bg-white/5 transition-colors"
                 >
                   <div className="space-y-1">
-                    <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                      <span className="font-semibold text-blue-600">
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-slate-300">
+                      <span className="font-bold text-cyan-300">
                         {MODE_META[sess.mode]?.label || sess.mode}
                       </span>
                       <span aria-hidden="true">·</span>
@@ -104,7 +104,7 @@ export const HistoryPage: React.FC = () => {
                         </>
                       ) : null}
                     </div>
-                    <p className="text-sm font-semibold text-slate-900 tabular-nums">
+                    <p className="text-sm font-bold text-white tabular-nums">
                       Benar {sess.correctCount} · Salah {sess.wrongCount} · Kosong{' '}
                       {sess.unansweredCount} ({sess.totalQuestions} soal)
                     </p>
@@ -112,8 +112,8 @@ export const HistoryPage: React.FC = () => {
 
                   <div className="flex items-center gap-4">
                     <div className="text-right">
-                      <p className="text-xs text-slate-500">Skor Sesi</p>
-                      <p className="text-lg font-bold text-blue-700 font-mono tabular-nums">
+                      <p className="text-xs text-slate-400">Skor Sesi</p>
+                      <p className="text-lg font-bold text-cyan-300 font-mono tabular-nums">
                         {sess.finalScore.toFixed(1)}
                       </p>
                     </div>
@@ -126,54 +126,54 @@ export const HistoryPage: React.FC = () => {
                 </button>
 
                 {isOpen && (
-                  <div className="border-t border-slate-200 bg-slate-50 p-4 sm:p-5 space-y-3">
+                  <div className="border-t border-white/10 bg-black/45 p-4 sm:p-5 space-y-3">
                     <div className="grid grid-cols-3 gap-3 text-xs">
-                      <div className="bg-white border border-slate-200 rounded-lg p-3">
-                        <span className="text-slate-500">Skor Maksimal</span>
-                        <p className="font-mono font-bold text-slate-900 tabular-nums mt-0.5">
+                      <div className="bg-slate-950/75 border border-white/10 rounded-lg p-3">
+                        <span className="text-slate-400">Skor Maksimal</span>
+                        <p className="font-mono font-bold text-white tabular-nums mt-0.5">
                           {sess.finalScore.toFixed(1)} / 100
                         </p>
                       </div>
-                      <div className="bg-white border border-slate-200 rounded-lg p-3">
-                        <span className="text-slate-500">Bobot Per Soal</span>
-                        <p className="font-mono font-bold text-slate-900 tabular-nums mt-0.5">
+                      <div className="bg-slate-950/75 border border-white/10 rounded-lg p-3">
+                        <span className="text-slate-400">Bobot Per Soal</span>
+                        <p className="font-mono font-bold text-white tabular-nums mt-0.5">
                           {weightPerQ} poin
                         </p>
                       </div>
-                      <div className="bg-white border border-slate-200 rounded-lg p-3">
-                        <span className="text-slate-500">Waktu Sesi</span>
-                        <p className="font-mono font-bold text-slate-900 tabular-nums mt-0.5">
+                      <div className="bg-slate-950/75 border border-white/10 rounded-lg p-3">
+                        <span className="text-slate-400">Waktu Sesi</span>
+                        <p className="font-mono font-bold text-white tabular-nums mt-0.5">
                           {formatDurationReadable(sess.duration)}
                         </p>
                       </div>
                     </div>
 
                     {loadingAnswersId === sess.id ? (
-                      <p className="text-xs text-slate-500">Memuat detail jawaban...</p>
+                      <p className="text-xs text-slate-300">Memuat detail jawaban...</p>
                     ) : (
                       <div className="space-y-2">
                         {answers.map((a, i) => (
                           <div
                             key={a.id}
-                            className="bg-white border border-slate-200 rounded-lg p-3 text-xs space-y-1"
+                            className="bg-slate-950/80 border border-white/10 rounded-lg p-3 text-xs space-y-1.5"
                           >
                             <div className="flex items-center justify-between gap-2">
-                              <span className="font-semibold text-slate-800">
+                              <span className="font-bold text-white">
                                 #{i + 1} · {a.questionTitle}
                               </span>
                               <span
-                                className={`font-semibold ${
-                                  a.isCompletedCorrect ? 'text-emerald-700' : 'text-red-600'
+                                className={`font-bold ${
+                                  a.isCompletedCorrect ? 'text-emerald-400' : 'text-rose-400'
                                 }`}
                               >
                                 {a.isCompletedCorrect ? 'Benar' : 'Salah/Kosong'} ({a.pointsEarned}
                                 /{a.maxPoints})
                               </span>
                             </div>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-slate-600">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-slate-300">
                               <div className="space-y-1">
                                 <span>Jawaban Pemain:</span>
-                                <pre className="font-mono text-xs text-slate-800 bg-slate-50 border border-slate-200 rounded px-2.5 py-1.5 whitespace-pre-wrap break-words">
+                                <pre className="font-mono text-xs text-slate-100 bg-black/60 border border-white/10 rounded px-2.5 py-1.5 whitespace-pre-wrap break-words">
                                   {a.playerAnswer || '(kosong)'}
                                 </pre>
                               </div>
@@ -186,21 +186,21 @@ export const HistoryPage: React.FC = () => {
                                     ? ' (Urutan Kata Bebas)'
                                     : ''}
                                 </span>
-                                <pre className="font-mono text-xs text-emerald-800 bg-emerald-50/70 border border-emerald-200 rounded px-2.5 py-1.5 whitespace-pre-wrap break-words">
+                                <pre className="font-mono text-xs text-emerald-300 bg-emerald-950/50 border border-emerald-400/30 rounded px-2.5 py-1.5 whitespace-pre-wrap break-words">
                                   {a.correctAnswer || '(kosong)'}
                                 </pre>
                               </div>
                             </div>
                             {a.acceptedAnswersSnapshot && a.acceptedAnswersSnapshot.length > 1 && (
-                              <div className="text-[11px] text-slate-600 pt-1 space-y-1">
-                                <span className="block text-slate-500">
+                              <div className="text-[11px] text-slate-300 pt-1 space-y-1">
+                                <span className="block text-slate-400">
                                   Alternatif Jawaban Diterima:
                                 </span>
                                 <div className="flex flex-wrap gap-1.5">
                                   {a.acceptedAnswersSnapshot.map((alt, idxAlt) => (
                                     <code
                                       key={idxAlt}
-                                      className="font-mono text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded"
+                                      className="font-mono text-slate-200 bg-white/10 px-1.5 py-0.5 rounded"
                                     >
                                       {alt}
                                     </code>
@@ -209,9 +209,9 @@ export const HistoryPage: React.FC = () => {
                               </div>
                             )}
                             {a.answerModeSnapshot === 'dynamic' && a.answerTemplateSnapshot && (
-                              <div className="text-[11px] text-slate-500 pt-1">
+                              <div className="text-[11px] text-slate-400 pt-1">
                                 <span>Template Admin: </span>
-                                <code className="font-mono text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded">
+                                <code className="font-mono text-slate-200 bg-white/10 px-1.5 py-0.5 rounded">
                                   {a.answerTemplateSnapshot}
                                 </code>
                               </div>

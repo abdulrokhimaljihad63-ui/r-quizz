@@ -2,15 +2,15 @@
 
 @layer base {
   :root {
-    --font-display: 'Outfit', system-ui, -apple-system, sans-serif;
-    --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    --font-display: 'Fredoka', system-ui, -apple-system, sans-serif;
+    --font-sans: 'Nunito', system-ui, -apple-system, sans-serif;
     --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
   }
 
   body {
     font-family: var(--font-sans);
-    background-color: #f8fafc;
-    color: #0f172a;
+    background-color: #05030b;
+    color: #f1f5f9;
     overflow-x: hidden;
   }
 
@@ -27,6 +27,42 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Hybrid Gaming x Terminal Cyber primary background */
+.rquizz-cyber-bg {
+  background-color: #05030b;
+  background-image:
+    linear-gradient(
+      180deg,
+      rgba(3, 3, 9, 0.72) 0%,
+      rgba(10, 5, 22, 0.44) 48%,
+      rgba(26, 6, 36, 0.52) 100%
+    ),
+    url('/assets/aistudio/file_000000005fe0821195ad1f9f1f7ad4d4_b49f931e.png');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+}
+
+/* Semi-transparent dark cyber panel for legible questions and cards */
+.rquizz-panel {
+  background-color: rgba(8, 6, 20, 0.76);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(192, 132, 252, 0.22);
+}
+
+/* RQuizz cartoon wordmark stroke matching the logo */
+.rquizz-wordmark {
+  font-family: var(--font-display);
+  text-shadow:
+    -1.5px -1.5px 0 #090d26,
+    1.5px -1.5px 0 #090d26,
+    -1.5px 1.5px 0 #090d26,
+    1.5px 1.5px 0 #090d26,
+    0 2px 6px rgba(0, 0, 0, 0.65);
+}
+
 /* Custom subtle scrollbars for horizontal journey track & terminal */
 .thin-scrollbar::-webkit-scrollbar {
   height: 6px;
@@ -34,15 +70,15 @@
 }
 
 .thin-scrollbar::-webkit-scrollbar-track {
-  background: #f1f5f9;
+  background: rgba(15, 23, 42, 0.6);
   border-radius: 9999px;
 }
 
 .thin-scrollbar::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
+  background: rgba(168, 85, 247, 0.45);
   border-radius: 9999px;
 }
 
 .thin-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+  background: rgba(217, 70, 239, 0.7);
 }
