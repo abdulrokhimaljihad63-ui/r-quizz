@@ -1,0 +1,565 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Safety Net (Default Deny)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Primitive Helpers ---
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function isBootstrappedAdmin() {
+      return isSignedIn()
+        && request.auth.token.email == 'oim67193@gmail.com'
+        && request.auth.token.email_verified == true;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        isBootstrappedAdmin() ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    // --- Validation Blueprints ---
+    function isValidPlayer(data) {
+      return data.keys().hasAll(['uid', 'playerId', 'name', 'bestScores', 'totalSessions', 'totalQuestions', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly([
+          'uid', 'playerId', 'name', 'absenNumber', 'bestScores', 'totalScore',
+          'modeTotalScores', 'totalDuration', 'modeTotalDurations',
+          'totalSessions', 'totalQuestions', 'preferences', 'createdAt', 'updatedAt', 'lastPlayedAt'
+        ])
+        && isValidId(data.uid)
+        && isValidId(data.playerId)
+        && data.name is string && data.name.size() >= 2 && data.name.size() <= 60
+        && (!('absenNumber' in data) || (data.absenNumber is number && data.absenNumber >= 1 && data.absenNumber <= 999))
+        && data.bestScores is map && data.bestScores.size() <= 15
+        && (!('totalScore' in data) || (data.totalScore is number && data.totalScore >= 0 && data.totalScore <= 10000000))
+        && (!('modeTotalScores' in data) || (data.modeTotalScores is map && data.modeTotalScores.size() <= 15))
+        && (!('totalDuration' in data) || (data.totalDuration is number && data.totalDuration >= 0 && data.totalDuration <= 100000000))
+        && (!('modeTotalDurations' in data) || (data.modeTotalDurations is map && data.modeTotalDurations.size() <= 15))
+        && data.totalSessions is number && data.totalSessions >= 0 && data.totalSessions <= 100000
+        && data.totalQuestions is number && data.totalQuestions >= 0 && data.totalQuestions <= 1000000
+        && (!('preferences' in data) || (data.preferences is map && data.preferences.size() <= 10))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp
+        && (!('lastPlayedAt' in data) || data.lastPlayedAt is timestamp);
+    }
+
+    function isValidLeaderboardEntry(data) {
+      return data.keys().hasAll(['playerUid', 'playerName', 'mode', 'bestScore', 'accuracyScore', 'duration', 'achievedAt', 'updatedAt'])
+        && data.keys().hasOnly(['playerUid', 'playerName', 'mode', 'bestScore', 'totalScore', 'sessionsCount', 'totalAccuracySum', 'lastSessionScore', 'accuracyScore', 'duration', 'achievedAt', 'updatedAt'])
+        && isValidId(data.playerUid)
+        && data.playerName is string && data.playerName.size() >= 2 && data.playerName.size() <= 60
+        && data.mode in ['overall', 'ujian', 'ujian_acak', 'troubleshoot', 'exam_challenge', 'guided_syntax', 'blind_syntax', 'troubleshooting']
+        && data.bestScore is number && data.bestScore >= 0 && data.bestScore <= 100
+        && (!('totalScore' in data) || (data.totalScore is number && data.totalScore >= 0 && data.totalScore <= 10000000))
+        && (!('sessionsCount' in data) || (data.sessionsCount is number && data.sessionsCount >= 0 && data.sessionsCount <= 100000))
+        && (!('totalAccuracySum' in data) || (data.totalAccuracySum is number && data.totalAccuracySum >= 0 && data.totalAccuracySum <= 10000000))
+        && (!('lastSessionScore' in data) || (data.lastSessionScore is number && data.lastSessionScore >= 0 && data.lastSessionScore <= 100))
+        && data.accuracyScore is number && data.accuracyScore >= 0 && data.accuracyScore <= 100
+        && data.duration is number && data.duration >= 0 && data.duration <= 100000000
+        && data.achievedAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidAdmin(data) {
+      return data.keys().hasAll(['uid', 'email', 'role', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'email', 'role', 'createdAt', 'updatedAt'])
+        && isValidId(data.uid)
+        && data.email is string && data.email.size() >= 3 && data.email.size() <= 120
+        && data.role == 'admin'
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidCategory(data) {
+      return data.keys().hasAll(['name', 'description', 'active', 'orderIndex', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['name', 'description', 'active', 'orderIndex', 'createdAt', 'updatedAt'])
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 80
+        && data.description is string && data.description.size() <= 400
+        && data.active is bool
+        && data.orderIndex is number && data.orderIndex >= 0 && data.orderIndex <= 1000
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidQuestion(data) {
+      return data.keys().hasAll([
+          'categoryId', 'title', 'prompt', 'promptVariations',
+          'correctAnswer', 'hint', 'options', 'correctOption', 'explanation',
+          'timeLimit', 'active', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'type', 'types', 'categoryId', 'stageId', 'orderIndex', 'title', 'prompt', 'promptVariations',
+          'correctAnswer', 'answerAlternatives', 'syntaxCheckMode', 'answerMode', 'answerTemplate', 'validateIpFormat',
+          'hint', 'options', 'correctOption', 'explanation',
+          'difficulty', 'points', 'timeLimit', 'active', 'sourceReference', 'createdAt', 'updatedAt'
+        ])
+        && ('type' in data || 'types' in data)
+        && (!('type' in data) || data.type in ['guided_syntax', 'blind_syntax', 'troubleshooting'])
+        && (!('types' in data) || (
+          data.types is list
+          && data.types.size() >= 1
+          && data.types.size() <= 3
+          && data.types.hasOnly(['guided_syntax', 'blind_syntax', 'troubleshooting'])
+        ))
+        && isValidId(data.categoryId)
+        && (!('stageId' in data) || (data.stageId is string && data.stageId.size() <= 128))
+        && (!('orderIndex' in data) || (data.orderIndex is number && data.orderIndex >= 0 && data.orderIndex <= 10000))
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 160
+        && data.prompt is string && data.prompt.size() >= 1 && data.prompt.size() <= 2000
+        && data.promptVariations is list && data.promptVariations.size() <= 30
+        && (data.promptVariations.size() == 0 || (data.promptVariations[0] is string && data.promptVariations[0].size() <= 2000))
+        && data.correctAnswer is string && data.correctAnswer.size() <= 2000
+        && (!('answerAlternatives' in data) || (
+          data.answerAlternatives is list
+          && data.answerAlternatives.size() <= 50
+          && (data.answerAlternatives.size() == 0 || (data.answerAlternatives[0] is string && data.answerAlternatives[0].size() <= 2000))
+        ))
+        && (!('syntaxCheckMode' in data) || data.syntaxCheckMode in ['exact', 'flexible_order'])
+        && (!('answerMode' in data) || data.answerMode in ['static', 'dynamic'])
+        && (!('answerTemplate' in data) || (data.answerTemplate is string && data.answerTemplate.size() <= 2000))
+        && (!('validateIpFormat' in data) || data.validateIpFormat is bool)
+        && data.hint is string && data.hint.size() <= 500
+        && data.options is list && data.options.size() <= 4
+        && (data.options.size() == 0 || (data.options[0] is string && data.options[0].size() <= 500))
+        && data.correctOption is number && data.correctOption >= -1 && data.correctOption <= 3
+        && data.explanation is string && data.explanation.size() <= 2000
+        && (!('difficulty' in data) || data.difficulty in ['easy', 'medium', 'hard'])
+        && (!('points' in data) || (data.points is number && data.points >= 1 && data.points <= 1000))
+        && data.timeLimit is number && data.timeLimit >= 0 && data.timeLimit <= 3600
+        && data.active is bool
+        && (!('sourceReference' in data) || (data.sourceReference is string && data.sourceReference.size() <= 200))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidSyntaxPath(data) {
+      return data.keys().hasAll(['title', 'description', 'categoryId', 'active', 'chapters', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['title', 'description', 'categoryId', 'active', 'chapters', 'createdAt', 'updatedAt'])
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 160
+        && data.description is string && data.description.size() <= 1000
+        && data.categoryId is string && data.categoryId.size() <= 128
+        && data.active is bool
+        && data.chapters is list && data.chapters.size() <= 30
+        && (data.chapters.size() == 0 || data.chapters[0] is map)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidSyntaxStage(data) {
+      return data.keys().hasAll(['pathId', 'orderIndex', 'title', 'description', 'chapterId', 'active', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['pathId', 'orderIndex', 'title', 'description', 'chapterId', 'active', 'createdAt', 'updatedAt'])
+        && isValidId(data.pathId)
+        && data.orderIndex is number && data.orderIndex >= 0 && data.orderIndex <= 500
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 160
+        && data.description is string && data.description.size() <= 1000
+        && data.chapterId is string && data.chapterId.size() <= 128
+        && data.active is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidGameSession(data) {
+      return data.keys().hasAll([
+          'playerUid', 'playerNameSnapshot', 'mode', 'questionIds', 'startTime', 'endTime',
+          'duration', 'totalQuestions', 'correctCount', 'wrongCount', 'unansweredCount',
+          'correctnessScore', 'accuracyScore', 'speedScore', 'finalScore', 'status', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'playerUid', 'playerNameSnapshot', 'playerAbsenSnapshot', 'mode', 'questionIds', 'startTime', 'endTime',
+          'duration', 'totalQuestions', 'correctCount', 'wrongCount', 'unansweredCount',
+          'correctnessScore', 'accuracyScore', 'speedScore', 'finalScore', 'status', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.playerUid)
+        && data.playerNameSnapshot is string && data.playerNameSnapshot.size() >= 1 && data.playerNameSnapshot.size() <= 60
+        && (!('playerAbsenSnapshot' in data) || (data.playerAbsenSnapshot is number && data.playerAbsenSnapshot >= 0 && data.playerAbsenSnapshot <= 999))
+        && data.mode in ['practice_only', 'ujian', 'ujian_acak', 'troubleshoot', 'guided_syntax', 'blind_syntax', 'troubleshooting', 'exam_challenge', 'syntax_journey']
+        && data.questionIds is list && data.questionIds.size() <= 100
+        && (data.questionIds.size() == 0 || data.questionIds[0] is string)
+        && data.startTime is timestamp
+        && data.endTime is timestamp
+        && data.duration is number && data.duration >= 0 && data.duration <= 86400
+        && data.totalQuestions is number && data.totalQuestions >= 0 && data.totalQuestions <= 100
+        && data.correctCount is number && data.correctCount >= 0 && data.correctCount <= 100
+        && data.wrongCount is number && data.wrongCount >= 0 && data.wrongCount <= 100
+        && data.unansweredCount is number && data.unansweredCount >= 0 && data.unansweredCount <= 100
+        && data.correctnessScore is number && data.correctnessScore >= 0 && data.correctnessScore <= 100
+        && data.accuracyScore is number && data.accuracyScore >= 0 && data.accuracyScore <= 100
+        && data.speedScore is number && data.speedScore >= 0 && data.speedScore <= 100
+        && data.finalScore is number && data.finalScore >= 0 && data.finalScore <= 100
+        && data.status in ['in_progress', 'completed']
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidSessionAnswer(data) {
+      return data.keys().hasAll([
+          'sessionId', 'playerUid', 'questionId', 'questionTitle', 'questionType', 'promptUsed',
+          'playerAnswer', 'correctAnswer', 'selectedOption', 'correctOption', 'isCorrectFirstTry',
+          'isCompletedCorrect', 'attempts', 'errorCount', 'errorPositions', 'pointsEarned',
+          'maxPoints', 'explanation', 'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'sessionId', 'playerUid', 'questionId', 'questionTitle', 'questionType', 'promptUsed',
+          'playerAnswer', 'correctAnswer', 'acceptedAnswersSnapshot', 'syntaxCheckModeSnapshot',
+          'absenNumberSnapshot', 'answerModeSnapshot', 'answerTemplateSnapshot',
+          'selectedOption', 'correctOption', 'isCorrectFirstTry',
+          'isCompletedCorrect', 'attempts', 'errorCount', 'errorPositions', 'pointsEarned',
+          'maxPoints', 'explanation', 'createdAt'
+        ])
+        && isValidId(data.sessionId)
+        && isValidId(data.playerUid)
+        && data.questionId is string && data.questionId.size() >= 1 && data.questionId.size() <= 128
+        && data.questionTitle is string && data.questionTitle.size() <= 160
+        && data.questionType in ['guided_syntax', 'blind_syntax', 'troubleshooting']
+        && data.promptUsed is string && data.promptUsed.size() <= 2000
+        && data.playerAnswer is string && data.playerAnswer.size() <= 2000
+        && data.correctAnswer is string && data.correctAnswer.size() <= 2000
+        && (!('acceptedAnswersSnapshot' in data) || (
+          data.acceptedAnswersSnapshot is list
+          && data.acceptedAnswersSnapshot.size() <= 50
+          && (data.acceptedAnswersSnapshot.size() == 0 || (data.acceptedAnswersSnapshot[0] is string && data.acceptedAnswersSnapshot[0].size() <= 2000))
+        ))
+        && (!('syntaxCheckModeSnapshot' in data) || data.syntaxCheckModeSnapshot in ['exact', 'flexible_order'])
+        && (!('absenNumberSnapshot' in data) || (data.absenNumberSnapshot is number && data.absenNumberSnapshot >= 0 && data.absenNumberSnapshot <= 999))
+        && (!('answerModeSnapshot' in data) || data.answerModeSnapshot in ['static', 'dynamic'])
+        && (!('answerTemplateSnapshot' in data) || (data.answerTemplateSnapshot is string && data.answerTemplateSnapshot.size() <= 2000))
+        && data.selectedOption is number && data.selectedOption >= -1 && data.selectedOption <= 3
+        && data.correctOption is number && data.correctOption >= -1 && data.correctOption <= 3
+        && data.isCorrectFirstTry is bool
+        && data.isCompletedCorrect is bool
+        && data.attempts is number && data.attempts >= 0 && data.attempts <= 1000
+        && data.errorCount is number && data.errorCount >= 0 && data.errorCount <= 1000
+        && data.errorPositions is list && data.errorPositions.size() <= 100
+        && (data.errorPositions.size() == 0 || data.errorPositions[0] is number)
+        && data.pointsEarned is number && data.pointsEarned >= 0 && data.pointsEarned <= 1000
+        && data.maxPoints is number && data.maxPoints >= 0 && data.maxPoints <= 1000
+        && data.explanation is string && data.explanation.size() <= 2000
+        && data.createdAt is timestamp;
+    }
+
+    function isValidPlayerProgress(data) {
+      return data.keys().hasAll(['playerUid', 'pathId', 'completedStageIds', 'lastCompletedOrder', 'currentStageId', 'totalAttempts', 'updatedAt'])
+        && data.keys().hasOnly(['playerUid', 'pathId', 'completedStageIds', 'lastCompletedOrder', 'currentStageId', 'totalAttempts', 'updatedAt'])
+        && isValidId(data.playerUid)
+        && isValidId(data.pathId)
+        && data.completedStageIds is list && data.completedStageIds.size() <= 500
+        && (data.completedStageIds.size() == 0 || data.completedStageIds[0] is string)
+        && data.lastCompletedOrder is number && data.lastCompletedOrder >= -1 && data.lastCompletedOrder <= 1000
+        && data.currentStageId is string && data.currentStageId.size() <= 128
+        && data.totalAttempts is number && data.totalAttempts >= 0 && data.totalAttempts <= 100000
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidSettings(data) {
+      return data.keys().hasAll([
+          'examTotalQuestions', 'examGuidedCount', 'examBlindCount', 'examTroubleshootingCount',
+          'examTimeLimitSeconds', 'practiceQuestionCount', 'practiceTargetSecondsPerQuestion',
+          'defaultPointsEasy', 'defaultPointsMedium', 'defaultPointsHard',
+          'syntaxErrorPenaltyPercent', 'weightCorrectness', 'weightAccuracy', 'weightSpeed',
+          'prioritizeUnseenVariations', 'enabledModes', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'examTotalQuestions', 'examGuidedCount', 'examBlindCount', 'examTroubleshootingCount',
+          'troubleshootQuestionCount', 'examTimeLimitSeconds', 'practiceQuestionCount', 'practiceTargetSecondsPerQuestion',
+          'defaultPointsEasy', 'defaultPointsMedium', 'defaultPointsHard',
+          'syntaxErrorPenaltyPercent', 'weightCorrectness', 'weightAccuracy', 'weightSpeed',
+          'prioritizeUnseenVariations', 'enabledModes', 'updatedAt'
+        ])
+        && data.examTotalQuestions is number && data.examTotalQuestions >= 1 && data.examTotalQuestions <= 100
+        && data.examGuidedCount is number && data.examGuidedCount >= 0 && data.examGuidedCount <= 100
+        && data.examBlindCount is number && data.examBlindCount >= 0 && data.examBlindCount <= 100
+        && data.examTroubleshootingCount is number && data.examTroubleshootingCount >= 0 && data.examTroubleshootingCount <= 100
+        && (data.examGuidedCount + data.examBlindCount + data.examTroubleshootingCount) == data.examTotalQuestions
+        && (!('troubleshootQuestionCount' in data) || (data.troubleshootQuestionCount is number && data.troubleshootQuestionCount >= 1 && data.troubleshootQuestionCount <= 100))
+        && data.examTimeLimitSeconds is number && data.examTimeLimitSeconds >= 60 && data.examTimeLimitSeconds <= 14400
+        && data.practiceQuestionCount is number && data.practiceQuestionCount >= 1 && data.practiceQuestionCount <= 50
+        && data.practiceTargetSecondsPerQuestion is number && data.practiceTargetSecondsPerQuestion >= 5 && data.practiceTargetSecondsPerQuestion <= 600
+        && data.defaultPointsEasy is number && data.defaultPointsEasy >= 1 && data.defaultPointsEasy <= 500
+        && data.defaultPointsMedium is number && data.defaultPointsMedium >= 1 && data.defaultPointsMedium <= 500
+        && data.defaultPointsHard is number && data.defaultPointsHard >= 1 && data.defaultPointsHard <= 500
+        && data.syntaxErrorPenaltyPercent is number && data.syntaxErrorPenaltyPercent >= 0 && data.syntaxErrorPenaltyPercent <= 100
+        && data.weightCorrectness is number && data.weightCorrectness >= 0 && data.weightCorrectness <= 1
+        && data.weightAccuracy is number && data.weightAccuracy >= 0 && data.weightAccuracy <= 1
+        && data.weightSpeed is number && data.weightSpeed >= 0 && data.weightSpeed <= 1
+        && data.prioritizeUnseenVariations is bool
+        && data.enabledModes is map && data.enabledModes.size() <= 15
+        && data.updatedAt is timestamp;
+    }
+
+    // --- Collection Rules ---
+
+    match /players/{uid} {
+      allow get: if isValidId(uid) && (isOwner(uid) || isAdmin());
+      allow list: if isAdmin();
+      allow create: if isValidId(uid)
+        && isOwner(uid)
+        && isValidPlayer(incoming())
+        && incoming().uid == uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(uid)
+        && isValidPlayer(incoming())
+        && incoming().uid == existing().uid
+        && incoming().playerId == existing().playerId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin() ||
+          (
+            isOwner(uid)
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'name', 'absenNumber', 'preferences', 'bestScores', 'totalScore',
+              'modeTotalScores', 'totalDuration', 'modeTotalDurations',
+              'totalSessions', 'totalQuestions', 'lastPlayedAt', 'updatedAt'
+            ])
+            && incoming().totalSessions >= existing().totalSessions
+            && (!('totalScore' in existing()) || incoming().totalScore >= existing().totalScore)
+            && (!('totalDuration' in existing()) || incoming().totalDuration >= existing().totalDuration)
+          )
+        );
+      allow delete: if isValidId(uid) && isAdmin();
+    }
+
+    match /leaderboard/{entryId} {
+      allow get: if isValidId(entryId) && isSignedIn();
+      allow list: if isSignedIn();
+      allow create: if isValidId(entryId)
+        && isSignedIn()
+        && isValidLeaderboardEntry(incoming())
+        && incoming().playerUid == request.auth.uid
+        && entryId == (request.auth.uid + '_' + incoming().mode)
+        && incoming().achievedAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(entryId)
+        && isSignedIn()
+        && isValidLeaderboardEntry(incoming())
+        && incoming().playerUid == existing().playerUid
+        && incoming().mode == existing().mode
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin() ||
+          (
+            existing().playerUid == request.auth.uid
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'playerName', 'bestScore', 'totalScore', 'sessionsCount',
+              'totalAccuracySum', 'lastSessionScore', 'accuracyScore', 'duration', 'achievedAt', 'updatedAt'
+            ])
+            && incoming().bestScore >= existing().bestScore
+            && (!('totalScore' in existing()) || incoming().totalScore >= existing().totalScore)
+            && (!('sessionsCount' in existing()) || incoming().sessionsCount >= existing().sessionsCount)
+            && (!('duration' in existing()) || incoming().duration >= existing().duration)
+          )
+        );
+      allow delete: if isValidId(entryId) && isAdmin();
+    }
+
+    match /admins/{uid} {
+      allow get: if isValidId(uid) && (isAdmin() || (isOwner(uid) && isBootstrappedAdmin()));
+      allow list: if isAdmin();
+      allow create: if isValidId(uid)
+        && isValidAdmin(incoming())
+        && incoming().uid == uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && ((isBootstrappedAdmin() && isOwner(uid)) || isAdmin());
+      allow update: if isValidId(uid)
+        && isAdmin()
+        && isValidAdmin(incoming())
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time;
+      allow delete: if isValidId(uid) && isAdmin();
+    }
+
+    match /categories/{categoryId} {
+      allow get: if isValidId(categoryId) && isSignedIn();
+      allow list: if isSignedIn();
+      allow create: if isValidId(categoryId)
+        && isAdmin()
+        && isValidCategory(incoming())
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(categoryId)
+        && isAdmin()
+        && isValidCategory(incoming())
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time;
+      allow delete: if isValidId(categoryId) && isAdmin();
+    }
+
+    match /questions/{questionId} {
+      allow get: if isValidId(questionId) && isSignedIn();
+      allow list: if isSignedIn();
+      allow create: if isValidId(questionId)
+        && isAdmin()
+        && isValidQuestion(incoming())
+        && exists(/databases/$(database)/documents/categories/$(incoming().categoryId))
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(questionId)
+        && isAdmin()
+        && isValidQuestion(incoming())
+        && exists(/databases/$(database)/documents/categories/$(incoming().categoryId))
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time;
+      allow delete: if isValidId(questionId) && isAdmin();
+    }
+
+    match /syntaxPaths/{pathId} {
+      allow get: if isValidId(pathId) && isSignedIn();
+      allow list: if isSignedIn();
+      allow create: if isValidId(pathId)
+        && isAdmin()
+        && isValidSyntaxPath(incoming())
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(pathId)
+        && isAdmin()
+        && isValidSyntaxPath(incoming())
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time;
+      allow delete: if isValidId(pathId) && isAdmin();
+    }
+
+    match /syntaxStages/{stageId} {
+      allow get: if isValidId(stageId) && isSignedIn();
+      allow list: if isSignedIn();
+      allow create: if isValidId(stageId)
+        && isAdmin()
+        && isValidSyntaxStage(incoming())
+        && exists(/databases/$(database)/documents/syntaxPaths/$(incoming().pathId))
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(stageId)
+        && isAdmin()
+        && isValidSyntaxStage(incoming())
+        && exists(/databases/$(database)/documents/syntaxPaths/$(incoming().pathId))
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time;
+      allow delete: if isValidId(stageId) && isAdmin();
+    }
+
+    match /gameSessions/{sessionId} {
+      allow get: if isValidId(sessionId) && isSignedIn() && (
+        isAdmin() ||
+        (resource == null && sessionId.matches('^sess_.*')) ||
+        (resource != null && existing().playerUid == request.auth.uid)
+      );
+      allow list: if isSignedIn() && (resource.data.playerUid == request.auth.uid || isAdmin());
+      allow create: if isValidId(sessionId)
+        && isSignedIn()
+        && isValidGameSession(incoming())
+        && incoming().playerUid == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(sessionId)
+        && isSignedIn()
+        && isValidGameSession(incoming())
+        && incoming().playerUid == existing().playerUid
+        && incoming().mode == existing().mode
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin() ||
+          (
+            existing().playerUid == request.auth.uid
+            && existing().status != 'completed'
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'endTime', 'duration', 'correctCount', 'wrongCount', 'unansweredCount',
+              'correctnessScore', 'accuracyScore', 'speedScore', 'finalScore', 'status', 'updatedAt'
+            ])
+          )
+        );
+      allow delete: if isValidId(sessionId) && isAdmin();
+
+      match /answers/{answerId} {
+        allow get: if isValidId(sessionId) && isValidId(answerId) && isSignedIn() && (
+          isAdmin() ||
+          (
+            exists(/databases/$(database)/documents/gameSessions/$(sessionId))
+            && get(/databases/$(database)/documents/gameSessions/$(sessionId)).data.playerUid == request.auth.uid
+          )
+        );
+        allow list: if isValidId(sessionId) && isSignedIn()
+          && (resource.data.playerUid == request.auth.uid || isAdmin());
+        allow create: if isValidId(sessionId) && isValidId(answerId)
+          && isSignedIn()
+          && isValidSessionAnswer(incoming())
+          && incoming().sessionId == sessionId
+          && incoming().playerUid == request.auth.uid
+          && incoming().createdAt == request.time
+          && exists(/databases/$(database)/documents/gameSessions/$(sessionId))
+          && get(/databases/$(database)/documents/gameSessions/$(sessionId)).data.playerUid == request.auth.uid;
+        allow update: if isValidId(sessionId) && isValidId(answerId) && isAdmin() && isValidSessionAnswer(incoming());
+        allow delete: if isValidId(sessionId) && isValidId(answerId) && isAdmin();
+      }
+    }
+
+    match /playerProgress/{progressId} {
+      allow get: if isValidId(progressId) && isSignedIn() && (
+        isAdmin() ||
+        (resource == null && progressId.split('_')[0] == request.auth.uid) ||
+        (resource != null && existing().playerUid == request.auth.uid)
+      );
+      allow list: if isSignedIn() && (resource.data.playerUid == request.auth.uid || isAdmin());
+      allow create: if isValidId(progressId)
+        && isSignedIn()
+        && isValidPlayerProgress(incoming())
+        && incoming().playerUid == request.auth.uid
+        && progressId == (request.auth.uid + '_' + incoming().pathId)
+        && (incoming().pathId == 'default_practice' || exists(/databases/$(database)/documents/syntaxPaths/$(incoming().pathId)))
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(progressId)
+        && isSignedIn()
+        && isValidPlayerProgress(incoming())
+        && incoming().playerUid == existing().playerUid
+        && incoming().pathId == existing().pathId
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin() ||
+          (
+            existing().playerUid == request.auth.uid
+            && incoming().diff(existing()).affectedKeys().hasOnly(['completedStageIds', 'lastCompletedOrder', 'currentStageId', 'totalAttempts', 'updatedAt'])
+          )
+        );
+      allow delete: if isValidId(progressId) && isAdmin();
+    }
+
+    match /settings/{settingId} {
+      allow get: if isValidId(settingId) && isSignedIn();
+      allow list: if isSignedIn();
+      allow create: if isValidId(settingId)
+        && isAdmin()
+        && isValidSettings(incoming())
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(settingId)
+        && isAdmin()
+        && isValidSettings(incoming())
+        && incoming().updatedAt == request.time;
+      allow delete: if isValidId(settingId) && isAdmin();
+    }
+  }
+}

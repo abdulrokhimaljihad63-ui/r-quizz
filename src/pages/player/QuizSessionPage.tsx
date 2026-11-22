@@ -1,0 +1,805 @@
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  AlertTriangle,
+  ArrowLeft,
+  ArrowRight,
+  Clock,
+  Info,
+  Send,
+} from 'lucide-react';
+import { MODE_META, QUESTION_TYPE_LABELS } from '../../constants/defaults';
+import { useAuth } from '../../contexts/AuthContext';
+import { ExamFeedbackOverlay } from '../../components/ExamFeedbackOverlay';
+import { SyntaxTerminal } from '../../components/SyntaxTerminal';
+import { generateDocId, saveCompletedSession } from '../../services/firestoreService';
+import type {
+  ActiveSessionResult,
+  GameMode,
+  SessionAnswer,
+  SessionQuestionInstance,
+} from '../../types';
+import {
+  buildExamSessionQuestions,
+  buildOrderedMilestoneSequence,
+  buildPracticeSessionQuestions,
+  buildTroubleshootSessionQuestions,
+  markVariationsSeen,
+} from '../../utils/randomizer';
+import { calculateExamWeightedScores } from '../../utils/scoring';
+import { resolveQuestionExpectedAnswers } from '../../utils/dynamicAnswer';
+import {
+  playErrorTetToot,
+  playSuccessFanfare,
+  preloadFeedbackSounds,
+} from '../../utils/soundEffects';
+import { evaluateSyntaxWithAlternatives } from '../../utils/syntaxEngine';
+
+interface QuizSessionPageProps {
+  mode: Exclude<GameMode, 'practice_only' | 'syntax_journey'>;
+  categoryId: string | 'all';
+  onFinish: (result: ActiveSessionResult) => void;
+  onExit: () => void;
+}
+
+type DraftAnswer = Omit<SessionAnswer, 'id' | 'sessionId' | 'playerUid' | 'createdAt'>;
+
+function formatTimer(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+
+export const QuizSessionPage: React.FC<QuizSessionPageProps> = ({
+  mode,
+  categoryId,
+  onFinish,
+  onExit,
+}) => {
+  const { player, questions, categories, syntaxPaths, syntaxStages, settings, refreshPlayer } =
+    useAuth();
+
+  const isOrderedUjian = mode === 'ujian';
+  const isRandomExam = mode === 'ujian_acak' || mode === 'exam_challenge';
+  const isTroubleshootMode = mode === 'troubleshoot';
+  const hasCountdownTimer = isOrderedUjian || isRandomExam;
+
+  // Freeze session question set once per mount
+  const selection = useMemo(() => {
+    if (!player) return null;
+
+    if (isOrderedUjian) {
+      const seq = buildOrderedMilestoneSequence(
+        questions,
+        syntaxPaths,
+        syntaxStages,
+        player.uid,
+        settings.prioritizeUnseenVariations,
+      );
+      return {
+        kind: 'ujian' as const,
+        instances: seq.instances,
+        hasShortfall: false,
+      };
+    }
+
+    if (isRandomExam) {
+      const data = buildExamSessionQuestions(questions, settings, player.uid);
+      return {
+        kind: 'ujian_acak' as const,
+        instances: data.instances,
+        hasShortfall: data.hasShortfall,
+        examData: data,
+      };
+    }
+
+    if (isTroubleshootMode) {
+      const count = Math.max(1, settings.troubleshootQuestionCount || 10);
+      const data = buildTroubleshootSessionQuestions(
+        questions,
+        count,
+        player.uid,
+        settings.prioritizeUnseenVariations,
+      );
+      return {
+        kind: 'troubleshoot' as const,
+        instances: data.instances,
+        hasShortfall: false,
+      };
+    }
+
+    const qType =
+      mode === 'guided_syntax'
+        ? 'guided_syntax'
+        : mode === 'blind_syntax'
+          ? 'blind_syntax'
+          : 'troubleshooting';
+    const data = buildPracticeSessionQuestions(
+      questions,
+      qType,
+      categoryId,
+      settings.practiceQuestionCount,
+      player.uid,
+      settings.prioritizeUnseenVariations,
+    );
+    return {
+      kind: 'legacy' as const,
+      instances: data.instances,
+      hasShortfall: false,
+    };
+    // Only build once per session mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const sessionInstances: SessionQuestionInstance[] = selection?.instances || [];
+
+  const [examShortfallConfirmed, setExamShortfallConfirmed] = useState<boolean>(() => {
+    if (!selection) return true;
+    return !selection.hasShortfall;
+  });
+
+  const [sessionId] = useState<string>(() => generateDocId('sess'));
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [startTime] = useState<Date>(() => new Date());
+  const [remainingSeconds, setRemainingSeconds] = useState<number>(() =>
+    hasCountdownTimer ? settings.examTimeLimitSeconds : 0,
+  );
+  const [, setElapsedSeconds] = useState(0);
+
+  // Current question state
+  const [syntaxInput, setSyntaxInput] = useState('');
+  const [mistakeCount, setMistakeCount] = useState(0);
+  const [wrongPositionsSeen, setWrongPositionsSeen] = useState<Set<number>>(() => new Set());
+  const [selectedOption, setSelectedOption] = useState<number>(-1);
+
+  // Post-submit animation & lock state for Mode Ujian
+  const [feedbackState, setFeedbackState] = useState<'correct' | 'wrong' | null>(null);
+  const [feedbackExiting, setFeedbackExiting] = useState(false);
+
+  const [collectedAnswers, setCollectedAnswers] = useState<DraftAnswer[]>([]);
+  const [submittingSession, setSubmittingSession] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  const finalizedRef = useRef(false);
+  const submitLockRef = useRef(false);
+  const pendingNextAnswersRef = useRef<DraftAnswer[] | null>(null);
+  const autoAdvanceTimerRef = useRef<number | null>(null);
+  const exitAnimTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (isOrderedUjian && player?.preferences?.soundEnabled !== false) {
+      preloadFeedbackSounds();
+    }
+    return () => {
+      if (autoAdvanceTimerRef.current !== null) {
+        window.clearTimeout(autoAdvanceTimerRef.current);
+      }
+      if (exitAnimTimerRef.current !== null) {
+        window.clearTimeout(exitAnimTimerRef.current);
+      }
+    };
+  }, [isOrderedUjian, player?.preferences?.soundEnabled]);
+
+  const currentInstance = sessionInstances[currentIndex] || null;
+  const currentQuestion = currentInstance?.question || null;
+
+  const categoryNameMap = useMemo(() => {
+    const map = new Map<string, string>();
+    categories.forEach((c) => map.set(c.id, c.name));
+    return map;
+  }, [categories]);
+
+  const perQuestionWeight = useMemo(() => {
+    if (sessionInstances.length === 0) return 0;
+    return Number((100 / sessionInstances.length).toFixed(1));
+  }, [sessionInstances.length]);
+
+  const buildCurrentDraftAnswer = useCallback((): DraftAnswer | null => {
+    if (!currentInstance) return null;
+    const q = currentInstance.question;
+    const effectiveType = currentInstance.assignedType;
+
+    if (effectiveType === 'troubleshooting') {
+      const isCorrect = selectedOption >= 0 && selectedOption === q.correctOption;
+      return {
+        questionId: q.id,
+        questionTitle: q.title,
+        questionType: effectiveType,
+        promptUsed: currentInstance.promptUsed,
+        playerAnswer: selectedOption >= 0 ? q.options[selectedOption] || '' : '',
+        correctAnswer: q.options[q.correctOption] || '',
+        absenNumberSnapshot: player?.absenNumber,
+        answerModeSnapshot: 'static',
+        answerTemplateSnapshot: '',
+        selectedOption,
+        correctOption: q.correctOption,
+        isCorrectFirstTry: isCorrect,
+        isCompletedCorrect: isCorrect,
+        attempts: selectedOption >= 0 ? 1 : 0,
+        errorCount: selectedOption >= 0 && !isCorrect ? 1 : 0,
+        errorPositions: [],
+        pointsEarned: isCorrect ? perQuestionWeight : 0,
+        maxPoints: perQuestionWeight,
+        explanation: q.explanation,
+      };
+    }
+
+    const resolvedInfo = resolveQuestionExpectedAnswers(q, player?.absenNumber);
+    const evalRes = evaluateSyntaxWithAlternatives(
+      syntaxInput,
+      resolvedInfo.resolvedAnswers,
+      resolvedInfo.syntaxCheckMode,
+    );
+    const completed = evalRes.isCompleteMatch;
+    const isCorrectFirstTry = isOrderedUjian ? completed : completed && mistakeCount === 0;
+    const hasTyped = syntaxInput.trim().length > 0;
+
+    return {
+      questionId: q.id,
+      questionTitle: q.title,
+      questionType: effectiveType,
+      promptUsed: currentInstance.promptUsed,
+      playerAnswer: syntaxInput,
+      correctAnswer: completed
+        ? evalRes.matchedAlternativeText
+        : resolvedInfo.primaryExpectedAnswer,
+      acceptedAnswersSnapshot: resolvedInfo.resolvedAnswers,
+      syntaxCheckModeSnapshot: resolvedInfo.syntaxCheckMode,
+      absenNumberSnapshot: player?.absenNumber,
+      answerModeSnapshot: resolvedInfo.answerMode,
+      answerTemplateSnapshot: resolvedInfo.primaryTemplate,
+      selectedOption: -1,
+      correctOption: -1,
+      isCorrectFirstTry,
+      isCompletedCorrect: completed,
+      attempts: hasTyped ? (isOrderedUjian ? 1 : 1 + mistakeCount) : 0,
+      errorCount: isOrderedUjian ? (hasTyped && !completed ? 1 : 0) : mistakeCount,
+      errorPositions: isOrderedUjian
+        ? []
+        : Array.from(wrongPositionsSeen).sort((a, b) => a - b),
+      pointsEarned: completed ? perQuestionWeight : 0,
+      maxPoints: perQuestionWeight,
+      explanation: q.explanation,
+    };
+  }, [
+    currentInstance,
+    player?.absenNumber,
+    selectedOption,
+    syntaxInput,
+    mistakeCount,
+    wrongPositionsSeen,
+    isOrderedUjian,
+    perQuestionWeight,
+  ]);
+
+  const finalizeSession = useCallback(
+    async (allAnswers: DraftAnswer[]) => {
+      if (finalizedRef.current || !player) return;
+      finalizedRef.current = true;
+      if (autoAdvanceTimerRef.current !== null) {
+        window.clearTimeout(autoAdvanceTimerRef.current);
+        autoAdvanceTimerRef.current = null;
+      }
+      if (exitAnimTimerRef.current !== null) {
+        window.clearTimeout(exitAnimTimerRef.current);
+        exitAnimTimerRef.current = null;
+      }
+      setFeedbackExiting(false);
+      setFeedbackState(null);
+      setSubmittingSession(true);
+      setSaveError(null);
+
+      try {
+        const endTime = new Date();
+        const actualDuration = Math.max(
+          1,
+          Math.round((endTime.getTime() - startTime.getTime()) / 1000),
+        );
+        const targetSeconds = hasCountdownTimer
+          ? settings.examTimeLimitSeconds
+          : Math.max(1, sessionInstances.length * settings.practiceTargetSecondsPerQuestion);
+
+        // Pad any unvisited questions as unanswered (0 points)
+        const paddedAnswers = [...allAnswers];
+        for (let i = paddedAnswers.length; i < sessionInstances.length; i++) {
+          const inst = sessionInstances[i];
+          const q = inst.question;
+          const effType = inst.assignedType;
+          const resolvedInfo = resolveQuestionExpectedAnswers(q, player.absenNumber);
+          paddedAnswers.push({
+            questionId: q.id,
+            questionTitle: q.title,
+            questionType: effType,
+            promptUsed: inst.promptUsed,
+            playerAnswer: '',
+            correctAnswer:
+              effType === 'troubleshooting'
+                ? q.options[q.correctOption] || ''
+                : resolvedInfo.primaryExpectedAnswer,
+            acceptedAnswersSnapshot:
+              effType === 'troubleshooting' ? [] : resolvedInfo.resolvedAnswers,
+            syntaxCheckModeSnapshot:
+              effType === 'troubleshooting' ? 'exact' : resolvedInfo.syntaxCheckMode,
+            absenNumberSnapshot: player.absenNumber,
+            answerModeSnapshot: effType === 'troubleshooting' ? 'static' : resolvedInfo.answerMode,
+            answerTemplateSnapshot:
+              effType === 'troubleshooting' ? '' : resolvedInfo.primaryTemplate,
+            selectedOption: -1,
+            correctOption: effType === 'troubleshooting' ? q.correctOption : -1,
+            isCorrectFirstTry: false,
+            isCompletedCorrect: false,
+            attempts: 0,
+            errorCount: 0,
+            errorPositions: [],
+            pointsEarned: 0,
+            maxPoints: perQuestionWeight,
+            explanation: q.explanation,
+          });
+        }
+
+        const scores = calculateExamWeightedScores(
+          paddedAnswers,
+          sessionInstances.length,
+          actualDuration,
+          targetSeconds,
+        );
+
+        markVariationsSeen(
+          player.uid,
+          sessionInstances.map((s) => s.variationKey),
+        );
+
+        const result = await saveCompletedSession({
+          sessionId,
+          player,
+          mode,
+          questionIds: sessionInstances.map((s) => s.question.id),
+          startTime,
+          endTime,
+          duration: actualDuration,
+          correctCount: scores.correctCount,
+          wrongCount: scores.wrongCount,
+          unansweredCount: scores.unansweredCount,
+          correctnessScore: scores.correctnessScore,
+          accuracyScore: scores.accuracyScore,
+          speedScore: scores.speedScore,
+          finalScore: scores.finalScore,
+          answers: paddedAnswers,
+        });
+
+        await refreshPlayer();
+        onFinish(result);
+      } catch (err) {
+        finalizedRef.current = false;
+        setSubmittingSession(false);
+        setSaveError(err instanceof Error ? err.message : 'Gagal menyimpan hasil sesi.');
+      }
+    },
+    [
+      sessionId,
+      player,
+      startTime,
+      hasCountdownTimer,
+      settings,
+      sessionInstances,
+      perQuestionWeight,
+      mode,
+      refreshPlayer,
+      onFinish,
+    ],
+  );
+
+  // Timer effect
+  useEffect(() => {
+    if (!examShortfallConfirmed || sessionInstances.length === 0 || submittingSession) return;
+
+    const timer = window.setInterval(() => {
+      setElapsedSeconds((prev) => prev + 1);
+      if (hasCountdownTimer) {
+        setRemainingSeconds((prev) => {
+          if (prev <= 1) {
+            window.clearInterval(timer);
+            if (pendingNextAnswersRef.current) {
+              void finalizeSession(pendingNextAnswersRef.current);
+            } else {
+              const currentDraft = buildCurrentDraftAnswer();
+              const merged = currentDraft ? [...collectedAnswers, currentDraft] : collectedAnswers;
+              void finalizeSession(merged);
+            }
+            return 0;
+          }
+          return prev - 1;
+        });
+      }
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [
+    examShortfallConfirmed,
+    sessionInstances.length,
+    submittingSession,
+    hasCountdownTimer,
+    buildCurrentDraftAnswer,
+    collectedAnswers,
+    finalizeSession,
+  ]);
+
+  const advanceToNextOrFinish = useCallback(
+    (nextAnswers: DraftAnswer[]) => {
+      if (autoAdvanceTimerRef.current !== null) {
+        window.clearTimeout(autoAdvanceTimerRef.current);
+        autoAdvanceTimerRef.current = null;
+      }
+      if (exitAnimTimerRef.current !== null) {
+        window.clearTimeout(exitAnimTimerRef.current);
+        exitAnimTimerRef.current = null;
+      }
+      pendingNextAnswersRef.current = null;
+      submitLockRef.current = false;
+      setFeedbackExiting(false);
+      setFeedbackState(null);
+
+      if (currentIndex + 1 >= sessionInstances.length) {
+        void finalizeSession(nextAnswers);
+        return;
+      }
+
+      setCollectedAnswers(nextAnswers);
+      setCurrentIndex((prev) => prev + 1);
+      setSyntaxInput('');
+      setMistakeCount(0);
+      setWrongPositionsSeen(new Set());
+      setSelectedOption(-1);
+    },
+    [currentIndex, sessionInstances.length, finalizeSession],
+  );
+
+  const handleUjianSubmit = useCallback(() => {
+    if (submitLockRef.current || feedbackState !== null || submittingSession) return;
+    const draft = buildCurrentDraftAnswer();
+    if (!draft) return;
+
+    submitLockRef.current = true;
+    const isCorrect = draft.isCompletedCorrect;
+    const soundOn = player?.preferences?.soundEnabled !== false;
+
+    if (isCorrect) {
+      playSuccessFanfare(soundOn);
+    } else {
+      playErrorTetToot(soundOn);
+    }
+
+    const nextAnswers = [...collectedAnswers, draft];
+    pendingNextAnswersRef.current = nextAnswers;
+    setFeedbackExiting(false);
+    setFeedbackState(isCorrect ? 'correct' : 'wrong');
+
+    exitAnimTimerRef.current = window.setTimeout(() => {
+      setFeedbackExiting(true);
+    }, 3100);
+
+    autoAdvanceTimerRef.current = window.setTimeout(() => {
+      advanceToNextOrFinish(nextAnswers);
+    }, 3550);
+  }, [
+    feedbackState,
+    submittingSession,
+    buildCurrentDraftAnswer,
+    player?.preferences?.soundEnabled,
+    collectedAnswers,
+    advanceToNextOrFinish,
+  ]);
+
+  const handleStandardNextOrFinish = () => {
+    if (submittingSession) return;
+    const draft = buildCurrentDraftAnswer();
+    if (!draft) return;
+    advanceToNextOrFinish([...collectedAnswers, draft]);
+  };
+
+  if (!player) return null;
+
+  // Empty state when no active questions exist (never fabricate fake questions!)
+  if (sessionInstances.length === 0) {
+    return (
+      <div className="max-w-2xl mx-auto bg-white border border-slate-200 rounded-2xl p-8 text-center space-y-4">
+        <AlertTriangle className="w-10 h-10 text-amber-500 mx-auto" />
+        <h1 className="text-xl font-bold text-slate-900">
+          Soal Untuk {MODE_META[mode].label} Belum Tersedia
+        </h1>
+        <p className="text-sm text-slate-600 leading-relaxed">
+          {isTroubleshootMode
+            ? 'Belum ada soal Troubleshooting aktif di bank soal. Hubungi Admin/Guru untuk menambahkan soal Troubleshooting terlebih dahulu.'
+            : isOrderedUjian
+              ? 'Belum ada soal sintaks aktif atau milestone di bank soal. Hubungi Admin/Guru untuk menambahkan soal sintaks terlebih dahulu.'
+              : 'Bank soal aktif untuk mode ini masih kosong. Hubungi Admin/Guru untuk menambahkan dan mengaktifkan soal terlebih dahulu.'}
+        </p>
+        <button
+          type="button"
+          onClick={onExit}
+          className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Kembali ke Pilihan Mode
+        </button>
+      </div>
+    );
+  }
+
+  // Random exam shortfall confirmation notice (never duplicates questions!)
+  if (isRandomExam && !examShortfallConfirmed && selection?.kind === 'ujian_acak') {
+    const examData = selection.examData;
+    const detail = examData.compositionDetail;
+    return (
+      <div className="max-w-2xl mx-auto bg-white border border-slate-200 rounded-2xl p-6 sm:p-8 space-y-5">
+        <div className="flex items-start gap-3">
+          <Info className="w-6 h-6 text-blue-600 shrink-0 mt-0.5" />
+          <div>
+            <h1 className="text-xl font-bold text-slate-900">Pemberitahuan Jumlah Soal Ujian</h1>
+            <p className="text-sm text-slate-600 mt-1 leading-relaxed">
+              Target <span className="font-semibold">{MODE_META[mode].label}</span> adalah{' '}
+              <span className="font-semibold">{examData.requestedTotal}</span> soal, namun bank soal
+              aktif saat ini tersedia{' '}
+              <span className="font-semibold text-blue-700">{examData.availableTotal}</span> soal
+              (sistem tidak menggandakan soal yang sama).
+            </p>
+          </div>
+        </div>
+
+        <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-2 text-xs text-slate-700">
+          <div className="flex justify-between">
+            <span>Sintaks Berpetunjuk</span>
+            <span className="font-mono tabular-nums">
+              {detail.guided.selected} / {detail.guided.requested} soal
+            </span>
+          </div>
+          <div className="flex justify-between">
+            <span>Sintaks Tanpa Petunjuk</span>
+            <span className="font-mono tabular-nums">
+              {detail.blind.selected} / {detail.blind.requested} soal
+            </span>
+          </div>
+          <div className="flex justify-between">
+            <span>Troubleshooting</span>
+            <span className="font-mono tabular-nums">
+              {detail.troubleshooting.selected} / {detail.troubleshooting.requested} soal
+            </span>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-end gap-3">
+          <button
+            type="button"
+            onClick={onExit}
+            className="px-4 py-2.5 text-sm font-medium text-slate-700 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors"
+          >
+            Kembali
+          </button>
+          <button
+            type="button"
+            onClick={() => setExamShortfallConfirmed(true)}
+            className="px-5 py-2.5 text-sm font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            Mulai Dengan {examData.availableTotal} Soal
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!currentQuestion || !currentInstance) return null;
+
+  const effectiveType = currentInstance.assignedType;
+  const isSyntaxQuestion = effectiveType !== 'troubleshooting';
+  const isBlindOrUjian = isOrderedUjian || effectiveType === 'blind_syntax';
+  const resolvedAnswerInfo = resolveQuestionExpectedAnswers(currentQuestion, player.absenNumber);
+  const progressPercent = Math.round(((currentIndex + 1) / sessionInstances.length) * 100);
+
+  return (
+    <div className="max-w-4xl mx-auto space-y-6">
+      {/* Top Session Bar */}
+      <div className="bg-white border border-slate-200 rounded-xl p-4 flex flex-wrap items-center justify-between gap-4">
+        <div className="space-y-1">
+          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+            <span className="font-semibold text-blue-600">{MODE_META[mode].label}</span>
+            <span aria-hidden="true">·</span>
+            <span className="tabular-nums">
+              Soal {currentIndex + 1} dari {sessionInstances.length}
+            </span>
+            <span aria-hidden="true">·</span>
+            <span className="tabular-nums">Bobot {perQuestionWeight} poin/soal (Maks 100)</span>
+          </div>
+          <div className="w-48 sm:w-64 h-2 bg-slate-100 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-blue-600 transition-all duration-200"
+              style={{ width: `${progressPercent}%` }}
+            />
+          </div>
+        </div>
+
+        <div className="flex items-center gap-4">
+          {hasCountdownTimer && (
+            <div className="flex items-center gap-1.5 text-sm font-mono tabular-nums text-slate-700">
+              <Clock
+                className={`w-4 h-4 ${remainingSeconds <= 60 ? 'text-red-600' : 'text-blue-600'}`}
+              />
+              <span className={remainingSeconds <= 60 ? 'text-red-600 font-semibold' : ''}>
+                {formatTimer(remainingSeconds)}
+              </span>
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={onExit}
+            className="px-3 py-1.5 text-xs font-medium text-slate-600 hover:text-slate-900 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
+          >
+            Keluar
+          </button>
+        </div>
+      </div>
+
+      {/* Question Card */}
+      <div className="bg-white border border-slate-200 rounded-2xl p-6 sm:p-8 space-y-6">
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+            <span>
+              {currentInstance.chapterTitle
+                ? `${currentInstance.chapterTitle} · `
+                : ''}
+              {categoryNameMap.get(currentQuestion.categoryId) || currentQuestion.categoryId}
+            </span>
+            <span aria-hidden="true">·</span>
+            <span>
+              {isOrderedUjian ? 'Ujian Sintaks Berurutan' : QUESTION_TYPE_LABELS[effectiveType]}
+            </span>
+            {isSyntaxQuestion && resolvedAnswerInfo.answerMode === 'dynamic' && player.absenNumber && (
+              <>
+                <span aria-hidden="true">·</span>
+                <span className="font-mono font-medium text-blue-700">
+                  Soal Dinamis (Absen {player.absenNumber})
+                </span>
+              </>
+            )}
+            {isSyntaxQuestion && resolvedAnswerInfo.syntaxCheckMode === 'flexible_order' && (
+              <>
+                <span aria-hidden="true">·</span>
+                <span className="font-medium text-amber-700">Urutan Kata Bebas</span>
+              </>
+            )}
+          </div>
+          <h2 className="text-xl font-bold text-slate-900">
+            {currentInstance.milestoneTitle || currentQuestion.title}
+          </h2>
+          <p className="text-sm sm:text-base text-slate-700 leading-relaxed whitespace-pre-line">
+            {currentInstance.promptUsed}
+          </p>
+        </div>
+
+        {/* Interactive Input Area (kept visible in place behind overlay) */}
+        {isSyntaxQuestion ? (
+          <div className="space-y-4">
+            <SyntaxTerminal
+              key={`${currentIndex}_${currentQuestion.id}`}
+              expectedAnswers={resolvedAnswerInfo.resolvedAnswers}
+              syntaxCheckMode={resolvedAnswerInfo.syntaxCheckMode}
+              value={syntaxInput}
+              onChange={setSyntaxInput}
+              disabled={submittingSession || feedbackState !== null}
+              onMistakeEvent={
+                isOrderedUjian
+                  ? undefined
+                  : (pos) => {
+                      setMistakeCount((c) => c + 1);
+                      setWrongPositionsSeen((prev) => new Set(prev).add(pos));
+                    }
+              }
+              onSubmit={
+                isOrderedUjian
+                  ? handleUjianSubmit
+                  : undefined
+              }
+              isBlindMode={isBlindOrUjian}
+              blindExamTyping={isOrderedUjian}
+              hint={!isBlindOrUjian ? currentQuestion.hint : undefined}
+            />
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="grid grid-cols-1 gap-3">
+              {currentQuestion.options.map((opt, idx) => {
+                const letter = ['A', 'B', 'C', 'D'][idx] || String(idx + 1);
+                const isSelected = selectedOption === idx;
+
+                const cardStyle = isSelected
+                  ? 'border-blue-600 bg-blue-50 text-blue-950 ring-1 ring-blue-600'
+                  : 'border-slate-200 bg-white hover:border-blue-300 hover:bg-blue-50/40 text-slate-800';
+
+                return (
+                  <button
+                    key={idx}
+                    type="button"
+                    disabled={submittingSession || feedbackState !== null}
+                    onClick={() => setSelectedOption(idx)}
+                    className={`w-full text-left px-4 py-3.5 rounded-xl border transition-colors flex items-start gap-3 ${cardStyle}`}
+                  >
+                    <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-700 shrink-0 mt-0.5">
+                      {letter}
+                    </span>
+                    <span className="text-sm leading-relaxed flex-1">{opt}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {saveError && (
+          <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-xs text-red-700">
+            {saveError}
+          </div>
+        )}
+
+        {/* Action Footer */}
+        <div className="pt-4 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
+          <div className="text-xs text-slate-500">
+            {isOrderedUjian ? (
+              <span>
+                Ketik sintaks lengkap dengan teks putih netral. Nilai ditentukan saat menekan
+                Submit Jawaban.
+              </span>
+            ) : (
+              <span>
+                Perhatian: Setelah lanjut ke soal berikutnya, jawaban tidak dapat diubah kembali.
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-3">
+            {isOrderedUjian ? (
+              <button
+                type="button"
+                disabled={submittingSession || feedbackState !== null}
+                onClick={handleUjianSubmit}
+                className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-60"
+              >
+                <Send className="w-4 h-4" />
+                {submittingSession ? 'Menyimpan Ujian...' : 'Submit Jawaban'}
+              </button>
+            ) : (
+              <button
+                type="button"
+                disabled={submittingSession}
+                onClick={handleStandardNextOrFinish}
+                className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-60"
+              >
+                {submittingSession
+                  ? 'Menyimpan Ujian...'
+                  : currentIndex + 1 >= sessionInstances.length
+                    ? 'Selesaikan Ujian'
+                    : isSyntaxQuestion && syntaxInput.trim().length === 0
+                      ? 'Lewati & Lanjut'
+                      : !isSyntaxQuestion && selectedOption < 0
+                        ? 'Lewati & Lanjut'
+                        : 'Lanjut ke Soal Berikutnya'}
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Ribbon + Confetti Overlay displayed directly on top of the active question page */}
+      {isOrderedUjian && feedbackState !== null && (
+        <ExamFeedbackOverlay
+          status={feedbackState}
+          isLastQuestion={currentIndex + 1 >= sessionInstances.length}
+          isExiting={feedbackExiting}
+          onContinueNow={() => {
+            if (pendingNextAnswersRef.current) {
+              advanceToNextOrFinish(pendingNextAnswersRef.current);
+            }
+          }}
+        />
+      )}
+    </div>
+  );
+};

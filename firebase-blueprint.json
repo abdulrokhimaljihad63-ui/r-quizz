@@ -1,0 +1,284 @@
+{
+  "entities": {
+    "Player": {
+      "title": "Player",
+      "description": "Authenticated anonymous player profile and aggregate cumulative statistics",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "playerId": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "name": { "type": "string", "minLength": 2, "maxLength": 60 },
+        "absenNumber": { "type": "number" },
+        "bestScores": { "type": "object" },
+        "totalScore": { "type": "number" },
+        "modeTotalScores": { "type": "object" },
+        "totalDuration": { "type": "number" },
+        "modeTotalDurations": { "type": "object" },
+        "totalSessions": { "type": "number" },
+        "totalQuestions": { "type": "number" },
+        "preferences": { "type": "object" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "lastPlayedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "playerId", "name", "bestScores", "totalSessions", "totalQuestions", "createdAt", "updatedAt"]
+    },
+    "LeaderboardEntry": {
+      "title": "LeaderboardEntry",
+      "description": "Public cumulative leaderboard entry without PII",
+      "type": "object",
+      "properties": {
+        "playerUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "playerName": { "type": "string", "minLength": 2, "maxLength": 60 },
+        "mode": { "type": "string", "enum": ["overall", "ujian", "ujian_acak", "troubleshoot", "exam_challenge", "guided_syntax", "blind_syntax", "troubleshooting"] },
+        "bestScore": { "type": "number" },
+        "totalScore": { "type": "number" },
+        "sessionsCount": { "type": "number" },
+        "totalAccuracySum": { "type": "number" },
+        "lastSessionScore": { "type": "number" },
+        "accuracyScore": { "type": "number" },
+        "duration": { "type": "number" },
+        "achievedAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["playerUid", "playerName", "mode", "bestScore", "accuracyScore", "duration", "achievedAt", "updatedAt"]
+    },
+    "Admin": {
+      "title": "Admin",
+      "description": "Authorized administrator account metadata",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "email": { "type": "string", "format": "email", "maxLength": 120 },
+        "role": { "type": "string", "enum": ["admin"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "role", "createdAt", "updatedAt"]
+    },
+    "Category": {
+      "title": "Category",
+      "description": "UKK Competency Category",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "description": { "type": "string", "maxLength": 400 },
+        "active": { "type": "boolean" },
+        "orderIndex": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "description", "active", "orderIndex", "createdAt", "updatedAt"]
+    },
+    "Question": {
+      "title": "Question",
+      "description": "Question bank item supporting multiple question types and multiline syntax answers",
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "enum": ["guided_syntax", "blind_syntax", "troubleshooting"] },
+        "types": { "type": "array" },
+        "categoryId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "stageId": { "type": "string", "maxLength": 128 },
+        "orderIndex": { "type": "number" },
+        "title": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "prompt": { "type": "string", "minLength": 1, "maxLength": 2000 },
+        "promptVariations": { "type": "array" },
+        "correctAnswer": { "type": "string", "maxLength": 2000 },
+        "answerAlternatives": { "type": "array" },
+        "syntaxCheckMode": { "type": "string", "enum": ["exact", "flexible_order"] },
+        "answerMode": { "type": "string", "enum": ["static", "dynamic"] },
+        "answerTemplate": { "type": "string", "maxLength": 2000 },
+        "validateIpFormat": { "type": "boolean" },
+        "hint": { "type": "string", "maxLength": 500 },
+        "options": { "type": "array" },
+        "correctOption": { "type": "number" },
+        "explanation": { "type": "string", "maxLength": 2000 },
+        "difficulty": { "type": "string", "enum": ["easy", "medium", "hard"] },
+        "points": { "type": "number" },
+        "timeLimit": { "type": "number" },
+        "active": { "type": "boolean" },
+        "sourceReference": { "type": "string", "maxLength": 200 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["types", "categoryId", "title", "prompt", "promptVariations", "correctAnswer", "hint", "options", "correctOption", "explanation", "timeLimit", "active", "createdAt", "updatedAt"]
+    },
+    "SyntaxPath": {
+      "title": "SyntaxPath",
+      "description": "Ordered learning path for Hanya Latihan & Ujian",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "description": { "type": "string", "maxLength": 1000 },
+        "categoryId": { "type": "string", "maxLength": 128 },
+        "active": { "type": "boolean" },
+        "chapters": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "description", "categoryId", "active", "chapters", "createdAt", "updatedAt"]
+    },
+    "SyntaxStage": {
+      "title": "SyntaxStage",
+      "description": "Sequential milestone in a path",
+      "type": "object",
+      "properties": {
+        "pathId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "orderIndex": { "type": "number" },
+        "title": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "description": { "type": "string", "maxLength": 1000 },
+        "chapterId": { "type": "string", "maxLength": 128 },
+        "active": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["pathId", "orderIndex", "title", "description", "chapterId", "active", "createdAt", "updatedAt"]
+    },
+    "GameSession": {
+      "title": "GameSession",
+      "description": "Completed exam session record",
+      "type": "object",
+      "properties": {
+        "playerUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "playerNameSnapshot": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "playerAbsenSnapshot": { "type": "number" },
+        "mode": { "type": "string", "enum": ["practice_only", "ujian", "ujian_acak", "troubleshoot", "guided_syntax", "blind_syntax", "troubleshooting", "exam_challenge", "syntax_journey"] },
+        "questionIds": { "type": "array" },
+        "startTime": { "type": "string", "format": "date-time" },
+        "endTime": { "type": "string", "format": "date-time" },
+        "duration": { "type": "number" },
+        "totalQuestions": { "type": "number" },
+        "correctCount": { "type": "number" },
+        "wrongCount": { "type": "number" },
+        "unansweredCount": { "type": "number" },
+        "correctnessScore": { "type": "number" },
+        "accuracyScore": { "type": "number" },
+        "speedScore": { "type": "number" },
+        "finalScore": { "type": "number" },
+        "status": { "type": "string", "enum": ["in_progress", "completed"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["playerUid", "playerNameSnapshot", "mode", "questionIds", "startTime", "endTime", "duration", "totalQuestions", "correctCount", "wrongCount", "unansweredCount", "correctnessScore", "accuracyScore", "speedScore", "finalScore", "status", "createdAt", "updatedAt"]
+    },
+    "SessionAnswer": {
+      "title": "SessionAnswer",
+      "description": "Detailed answer entry for a question inside a game session",
+      "type": "object",
+      "properties": {
+        "sessionId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "playerUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "questionId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "questionTitle": { "type": "string", "maxLength": 160 },
+        "questionType": { "type": "string", "enum": ["guided_syntax", "blind_syntax", "troubleshooting"] },
+        "promptUsed": { "type": "string", "maxLength": 2000 },
+        "playerAnswer": { "type": "string", "maxLength": 2000 },
+        "correctAnswer": { "type": "string", "maxLength": 2000 },
+        "acceptedAnswersSnapshot": { "type": "array" },
+        "syntaxCheckModeSnapshot": { "type": "string", "enum": ["exact", "flexible_order"] },
+        "absenNumberSnapshot": { "type": "number" },
+        "answerModeSnapshot": { "type": "string", "enum": ["static", "dynamic"] },
+        "answerTemplateSnapshot": { "type": "string", "maxLength": 2000 },
+        "selectedOption": { "type": "number" },
+        "correctOption": { "type": "number" },
+        "isCorrectFirstTry": { "type": "boolean" },
+        "isCompletedCorrect": { "type": "boolean" },
+        "attempts": { "type": "number" },
+        "errorCount": { "type": "number" },
+        "errorPositions": { "type": "array" },
+        "pointsEarned": { "type": "number" },
+        "maxPoints": { "type": "number" },
+        "explanation": { "type": "string", "maxLength": 2000 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["sessionId", "playerUid", "questionId", "questionTitle", "questionType", "promptUsed", "playerAnswer", "correctAnswer", "selectedOption", "correctOption", "isCorrectFirstTry", "isCompletedCorrect", "attempts", "errorCount", "errorPositions", "pointsEarned", "maxPoints", "explanation", "createdAt"]
+    },
+    "PlayerProgress": {
+      "title": "PlayerProgress",
+      "description": "Sequential Hanya Latihan milestone progress per player and path",
+      "type": "object",
+      "properties": {
+        "playerUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "pathId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "completedStageIds": { "type": "array" },
+        "lastCompletedOrder": { "type": "number" },
+        "currentStageId": { "type": "string", "maxLength": 128 },
+        "totalAttempts": { "type": "number" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["playerUid", "pathId", "completedStageIds", "lastCompletedOrder", "currentStageId", "totalAttempts", "updatedAt"]
+    },
+    "AppSettings": {
+      "title": "AppSettings",
+      "description": "Global game configuration managed by admin",
+      "type": "object",
+      "properties": {
+        "examTotalQuestions": { "type": "number" },
+        "examGuidedCount": { "type": "number" },
+        "examBlindCount": { "type": "number" },
+        "examTroubleshootingCount": { "type": "number" },
+        "troubleshootQuestionCount": { "type": "number" },
+        "examTimeLimitSeconds": { "type": "number" },
+        "practiceQuestionCount": { "type": "number" },
+        "practiceTargetSecondsPerQuestion": { "type": "number" },
+        "defaultPointsEasy": { "type": "number" },
+        "defaultPointsMedium": { "type": "number" },
+        "defaultPointsHard": { "type": "number" },
+        "syntaxErrorPenaltyPercent": { "type": "number" },
+        "weightCorrectness": { "type": "number" },
+        "weightAccuracy": { "type": "number" },
+        "weightSpeed": { "type": "number" },
+        "prioritizeUnseenVariations": { "type": "boolean" },
+        "enabledModes": { "type": "object" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["examTotalQuestions", "examGuidedCount", "examBlindCount", "examTroubleshootingCount", "examTimeLimitSeconds", "practiceQuestionCount", "practiceTargetSecondsPerQuestion", "defaultPointsEasy", "defaultPointsMedium", "defaultPointsHard", "syntaxErrorPenaltyPercent", "weightCorrectness", "weightAccuracy", "weightSpeed", "prioritizeUnseenVariations", "enabledModes", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/players/{uid}": {
+      "schema": { "$ref": "#/entities/Player" },
+      "description": "Private player profile and stats"
+    },
+    "/leaderboard/{entryId}": {
+      "schema": { "$ref": "#/entities/LeaderboardEntry" },
+      "description": "Public leaderboard entries keyed by playerUid_mode"
+    },
+    "/admins/{uid}": {
+      "schema": { "$ref": "#/entities/Admin" },
+      "description": "Admin authorization registry"
+    },
+    "/categories/{categoryId}": {
+      "schema": { "$ref": "#/entities/Category" },
+      "description": "Competency categories"
+    },
+    "/questions/{questionId}": {
+      "schema": { "$ref": "#/entities/Question" },
+      "description": "Question bank items and general prompt variations"
+    },
+    "/syntaxPaths/{pathId}": {
+      "schema": { "$ref": "#/entities/SyntaxPath" },
+      "description": "Ordered milestone tracks"
+    },
+    "/syntaxStages/{stageId}": {
+      "schema": { "$ref": "#/entities/SyntaxStage" },
+      "description": "Ordered milestones inside tracks"
+    },
+    "/gameSessions/{sessionId}": {
+      "schema": { "$ref": "#/entities/GameSession" },
+      "description": "Player exam attempt summaries"
+    },
+    "/gameSessions/{sessionId}/answers/{answerId}": {
+      "schema": { "$ref": "#/entities/SessionAnswer" },
+      "description": "Per-question answer records for a game session"
+    },
+    "/playerProgress/{progressId}": {
+      "schema": { "$ref": "#/entities/PlayerProgress" },
+      "description": "Hanya Latihan milestone progress keyed by playerUid_pathId"
+    },
+    "/settings/{settingId}": {
+      "schema": { "$ref": "#/entities/AppSettings" },
+      "description": "Global quiz configuration"
+    }
+  }
+}
